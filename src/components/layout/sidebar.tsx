@@ -16,6 +16,8 @@ import {
   User,
   FolderOpen,
   FileCode,
+  Users,
+  HardDrive,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,8 @@ const navItems = [
   { href: "/compose", label: "Editor Compose", icon: FileCode },
   { href: "/containers", label: "Containers", icon: Container },
   { href: "/images", label: "Imagens", icon: ImageIcon },
+  { href: "/volumes", label: "Volumes", icon: HardDrive },
+  { href: "/teams", label: "Times", icon: Users },
   { href: "/settings", label: "Configurações", icon: Settings },
 ];
 
