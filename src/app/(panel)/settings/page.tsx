@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User, Shield, Info } from "lucide-react";
-import Image from "next/image";
+
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -59,11 +59,10 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 p-4 bg-black/50 rounded-lg">
-            <Image
+            <img
               src="/images/logo-white.png"
               alt="CoreByte"
-              width={48}
-              height={48}
+              className="w-12 h-12"
             />
             <div>
               <h3 className="text-lg font-bold text-white">CoreByte Panel</h3>

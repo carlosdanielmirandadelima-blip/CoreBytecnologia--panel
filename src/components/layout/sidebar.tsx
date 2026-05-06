@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -43,12 +43,10 @@ export default function Sidebar() {
       )}
     >
       <div className="flex items-center gap-3 p-4 border-b border-white/10">
-        <Image
+        <img
           src="/images/logo-white.png"
           alt="CoreByte"
-          width={32}
-          height={32}
-          className="min-w-[32px]"
+          className="min-w-[32px] w-8 h-8"
         />
         {!collapsed && (
           <div className="flex flex-col overflow-hidden">

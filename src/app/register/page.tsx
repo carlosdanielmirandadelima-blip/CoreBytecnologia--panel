@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,11 +64,9 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md bg-[#111] border-white/10 relative">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex justify-center">
-            <Image
+            <img
               src="/images/logo-white.png"
-              alt="CoreByte Tecnologia"
-              width={48}
-              height={48}
+              alt="CoreByte Tecnologia" className="w-12 h-12"
             />
           </div>
           <div>
@@ -176,12 +174,10 @@ export default function RegisterPage() {
           </div>
 
           <div className="mt-8 pt-4 border-t border-white/5 flex items-center justify-center gap-2">
-            <Image
+            <img
               src="/images/logo-white.png"
               alt="CoreByte"
-              width={14}
-              height={14}
-              className="opacity-30"
+              className="opacity-30 w-3.5 h-3.5"
             />
             <span className="text-[10px] text-white/30">
               CoreByte Tecnologia
