@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  panel:
+    build: .
+    container_name: corebyte-panel
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/data/corebyte.db
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-me}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - panel-data:/app/data
+
+volumes:
+  panel-data:
