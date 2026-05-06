@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  FolderOpen,
+  FileCode,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,8 @@ import {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/projects", label: "Projetos", icon: FolderOpen },
+  { href: "/compose", label: "Editor Compose", icon: FileCode },
   { href: "/containers", label: "Containers", icon: Container },
   { href: "/images", label: "Imagens", icon: ImageIcon },
   { href: "/settings", label: "Configurações", icon: Settings },

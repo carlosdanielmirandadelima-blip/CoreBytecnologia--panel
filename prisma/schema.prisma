@@ -21,9 +21,41 @@ model Project {
   id            String    @id @default(cuid())
   name          String
   description   String    @default("")
-  status        String    @default("active")
+  type          String    @default("custom")
+  status        String    @default("stopped")
+  gitUrl        String    @default("")
+  branch        String    @default("main")
+  templateId    String    @default("")
+  composeFile   String    @default("")
+  domain        String    @default("")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  services      Service[]
+  envVars       EnvVar[]
+}
+
+model Service {
+  id            String    @id @default(cuid())
+  name          String
+  image         String
+  containerId   String    @default("")
+  status        String    @default("stopped")
+  ports         String    @default("")
+  volumes       String    @default("")
+  command       String    @default("")
+  replicas      Int       @default(1)
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model EnvVar {
+  id            String    @id @default(cuid())
+  key           String
+  value         String
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model Setting {
