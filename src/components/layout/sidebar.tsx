@@ -18,6 +18,7 @@ import {
   FileCode,
   Users,
   HardDrive,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/compose", label: "Editor Compose", icon: FileCode },
   { href: "/containers", label: "Containers", icon: Container },
   { href: "/images", label: "Imagens", icon: ImageIcon },
+  { href: "/monitoring", label: "Monitoramento", icon: Activity },
   { href: "/volumes", label: "Volumes", icon: HardDrive },
   { href: "/teams", label: "Times", icon: Users },
   { href: "/settings", label: "Configurações", icon: Settings },
