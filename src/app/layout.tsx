@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "CoreByte Panel",
   description:
     "Painel de gerenciamento Docker - CoreByte Tecnologia",
-  icons: { icon: "/images/logo-black.png" },
+  icons: { icon: "/assets/logo-black.png" },
 };
 
 export default function RootLayout({

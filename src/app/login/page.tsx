@@ -45,7 +45,7 @@ export default function LoginPage() {
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex justify-center">
             <img
-              src="/images/logo-white.png"
+              src="/assets/logo-white.png"
               alt="CoreByte Tecnologia" className="w-12 h-12"
             />
           </div>
@@ -125,7 +125,7 @@ export default function LoginPage() {
 
           <div className="mt-8 pt-4 border-t border-white/5 flex items-center justify-center gap-2">
             <img
-              src="/images/logo-white.png"
+              src="/assets/logo-white.png"
               alt="CoreByte"
               className="opacity-30 w-3.5 h-3.5"
             />

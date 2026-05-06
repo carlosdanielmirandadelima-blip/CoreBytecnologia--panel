@@ -60,7 +60,7 @@ export default function SettingsPage() {
         <CardContent>
           <div className="flex items-center gap-4 p-4 bg-black/50 rounded-lg">
             <img
-              src="/images/logo-white.png"
+              src="/assets/logo-white.png"
               alt="CoreByte"
               className="w-12 h-12"
             />

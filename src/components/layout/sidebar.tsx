@@ -44,7 +44,7 @@ export default function Sidebar() {
     >
       <div className="flex items-center gap-3 p-4 border-b border-white/10">
         <img
-          src="/images/logo-white.png"
+          src="/assets/logo-white.png"
           alt="CoreByte"
           className="min-w-[32px] w-8 h-8"
         />
