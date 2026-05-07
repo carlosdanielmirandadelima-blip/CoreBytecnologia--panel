@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  User, Shield, Info, Save, Loader2, Key, Plus, Trash2, Variable, Plug,
+  User, Shield, Info, Save, Loader2, Key, Plus, Trash2, Variable, Plug, Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +37,12 @@ export default function SettingsPage() {
   const [addingEnv, setAddingEnv] = useState(false);
   const [cfToken, setCfToken] = useState("");
   const [savingCf, setSavingCf] = useState(false);
+  const [twoFaQr, setTwoFaQr] = useState("");
+  const [twoFaSecret, setTwoFaSecret] = useState("");
+  const [twoFaCode, setTwoFaCode] = useState("");
+  const [twoFaEnabled, setTwoFaEnabled] = useState(false);
+  const [twoFaLoading, setTwoFaLoading] = useState(false);
+  const [disableCode, setDisableCode] = useState("");
 
   useEffect(() => {
     if (session?.user) {
@@ -60,6 +66,47 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch("/api/settings?key=cloudflare_api_token").then(r => r.json()).then(d => { if (d.value) setCfToken(d.value); }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch("/api/users/profile").then(r => r.json()).then(d => { if (d.twoFactorEnabled) setTwoFaEnabled(true); }).catch(() => {});
+  }, []);
+
+  const handleEnable2FA = async () => {
+    setTwoFaLoading(true);
+    try {
+      const res = await fetch("/api/two-factor/enable", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setTwoFaQr(data.qrCode);
+        setTwoFaSecret(data.secret);
+      } else toast.error("Erro ao gerar QR code");
+    } catch { toast.error("Erro"); }
+    finally { setTwoFaLoading(false); }
+  };
+
+  const handleVerify2FA = async () => {
+    if (!twoFaCode || twoFaCode.length !== 6) { toast.error("Insira o código de 6 dígitos"); return; }
+    try {
+      const res = await fetch("/api/two-factor/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: twoFaCode }),
+      });
+      if (res.ok) { toast.success("2FA ativado!"); setTwoFaEnabled(true); setTwoFaQr(""); setTwoFaCode(""); }
+      else { const d = await res.json(); toast.error(d.error); }
+    } catch { toast.error("Erro"); }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!disableCode) { toast.error("Insira o código"); return; }
+    try {
+      const res = await fetch("/api/two-factor/disable", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: disableCode }),
+      });
+      if (res.ok) { toast.success("2FA desativado"); setTwoFaEnabled(false); setDisableCode(""); }
+      else { const d = await res.json(); toast.error(d.error); }
+    } catch { toast.error("Erro"); }
+  };
 
   const handleSaveCfToken = async () => {
     setSavingCf(true);
@@ -222,7 +269,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="mt-4">
+        <TabsContent value="security" className="mt-4 space-y-4">
           <Card className="bg-[#111] border-white/10">
             <CardHeader>
               <CardTitle className="text-base text-white flex items-center gap-2">
@@ -248,6 +295,60 @@ export default function SettingsPage() {
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleChangePassword} disabled={savingPassword}>
                 {savingPassword ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Key className="h-4 w-4 mr-1" />} Alterar Senha
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#111] border-white/10">
+            <CardHeader>
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-white/50" /> Autenticação em Duas Etapas (2FA)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 max-w-md">
+              {twoFaEnabled ? (
+                <>
+                  <div className="flex items-center gap-2 p-3 bg-green-500/5 rounded-lg border border-green-500/20">
+                    <Shield className="h-4 w-4 text-green-400" />
+                    <span className="text-sm text-green-400">2FA está ativado</span>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-white/60 text-xs">Código para desativar</Label>
+                    <Input value={disableCode} onChange={(e) => setDisableCode(e.target.value)} maxLength={6}
+                      className="bg-white/5 border-white/10 text-white font-mono" placeholder="000000" />
+                    <Button size="sm" variant="outline" className="border-red-500/20 text-red-400" onClick={handleDisable2FA}>
+                      Desativar 2FA
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {!twoFaQr ? (
+                    <>
+                      <p className="text-xs text-white/40">Adicione uma camada extra de segurança usando um app autenticador (Google Authenticator, Authy, etc)</p>
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleEnable2FA} disabled={twoFaLoading}>
+                        {twoFaLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Smartphone className="h-4 w-4 mr-1" />}
+                        Configurar 2FA
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-white/40">Escaneie o QR code com seu app autenticador:</p>
+                      <div className="flex justify-center p-4 bg-white rounded-lg w-fit">
+                        <img src={twoFaQr} alt="QR Code 2FA" className="w-48 h-48" />
+                      </div>
+                      <p className="text-[10px] text-white/30">Ou insira manualmente: <code className="text-blue-400">{twoFaSecret}</code></p>
+                      <div className="space-y-2">
+                        <Label className="text-white/60 text-xs">Código de verificação</Label>
+                        <Input value={twoFaCode} onChange={(e) => setTwoFaCode(e.target.value)} maxLength={6}
+                          className="bg-white/5 border-white/10 text-white font-mono" placeholder="000000" />
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={handleVerify2FA}>
+                          Verificar e Ativar
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

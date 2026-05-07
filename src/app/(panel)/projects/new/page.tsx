@@ -64,6 +64,9 @@ export default function NewProjectPage() {
   const [customPorts, setCustomPorts] = useState("");
   const [customVolumes, setCustomVolumes] = useState("");
 
+  // Environment
+  const [environment, setEnvironment] = useState("production");
+
   // Git deploy fields
   const [gitUrl, setGitUrl] = useState("");
   const [gitBranch, setGitBranch] = useState("main");
@@ -110,6 +113,7 @@ export default function NewProjectPage() {
           name,
           type: "template",
           templateId: selectedTemplate.id,
+          environment,
           envVars,
         }),
       });
@@ -143,6 +147,7 @@ export default function NewProjectPage() {
           name,
           description,
           type: "custom",
+          environment,
           services: [{
             name: name,
             image: customImage,
@@ -184,6 +189,7 @@ export default function NewProjectPage() {
           type: "git",
           gitUrl,
           branch: gitBranch,
+          environment,
           envVars,
         }),
       });
@@ -367,10 +373,21 @@ export default function NewProjectPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-white/70">Descrição</Label>
-                <Input value={description} onChange={(e) => setDescription(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white" placeholder="Descrição do projeto" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-white/70">Descrição</Label>
+                  <Input value={description} onChange={(e) => setDescription(e.target.value)}
+                    className="bg-white/5 border-white/10 text-white" placeholder="Descrição do projeto" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-white/70">Ambiente</Label>
+                  <select value={environment} onChange={(e) => setEnvironment(e.target.value)}
+                    className="w-full h-9 rounded-md bg-white/5 border border-white/10 text-white text-sm px-3">
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

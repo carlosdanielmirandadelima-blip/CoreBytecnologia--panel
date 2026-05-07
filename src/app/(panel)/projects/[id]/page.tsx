@@ -195,6 +195,9 @@ export default function ProjectDetailPage() {
               <Badge className={getStatusColor(project.status)}>
                 {getStatusLabel(project.status)}
               </Badge>
+              <Badge className={project.environment === "production" ? "bg-red-500/10 text-red-400 border-0" : project.environment === "staging" ? "bg-yellow-500/10 text-yellow-400 border-0" : "bg-blue-500/10 text-blue-400 border-0"}>
+                {project.environment || "production"}
+              </Badge>
             </div>
             <p className="text-sm text-white/50">
               {project.type === "template" ? `Template: ${project.templateId}` : project.type === "git" ? `Git: ${project.gitUrl}` : "Projeto customizado"}

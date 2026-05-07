@@ -14,9 +14,12 @@ model User {
   password      String
   role          String        @default("admin")
   avatarUrl     String        @default("")
+  twoFactorSecret String      @default("")
+  twoFactorEnabled Boolean    @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   teamMembers   TeamMember[]
+  apiKeys       ApiKey[]
 }
 
 model Team {
@@ -52,6 +55,7 @@ model Project {
   composeFile   String    @default("")
   domain        String    @default("")
   teamId        String    @default("")
+  environment   String    @default("production")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   services      Service[]
@@ -198,5 +202,44 @@ model StatusCheck {
   message       String    @default("")
   monitorId     String
   monitor       StatusMonitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  name          String
+  key           String    @unique
+  prefix        String    @default("")
+  permissions   String    @default("read")
+  lastUsed      DateTime?
+  expiresAt     DateTime?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Plugin {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  displayName   String
+  description   String    @default("")
+  version       String    @default("1.0.0")
+  icon          String    @default("puzzle")
+  enabled       Boolean   @default(false)
+  config        String    @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  action        String
+  resource      String
+  resourceId    String    @default("")
+  details       String    @default("")
+  userId        String    @default("")
+  userName      String    @default("")
+  ipAddress     String    @default("")
   createdAt     DateTime  @default(now())
 }

@@ -17,6 +17,8 @@ const pageTitles: Record<string, string> = {
   "/servers": "Servidores",
   "/dns": "DNS Cloudflare",
   "/status-pages": "Status Pages",
+  "/api-keys": "API Keys",
+  "/plugins": "Plugins",
   "/teams": "Times",
   "/settings": "Configurações",
 };
