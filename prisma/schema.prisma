@@ -98,3 +98,32 @@ model Setting {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
+
+model Backup {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("volume")
+  source        String
+  fileName      String
+  filePath      String
+  fileSize      Int       @default(0)
+  status        String    @default("pending")
+  scheduleId    String?
+  schedule      BackupSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+}
+
+model BackupSchedule {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("volume")
+  source        String
+  cron          String    @default("0 2 * * *")
+  retention     Int       @default(7)
+  enabled       Boolean   @default(true)
+  lastRun       DateTime?
+  nextRun       DateTime?
+  backups       Backup[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}

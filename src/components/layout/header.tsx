@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   "/images": "Imagens",
   "/monitoring": "Monitoramento",
   "/volumes": "Volumes",
+  "/backups": "Backups",
   "/teams": "Times",
   "/settings": "Configurações",
 };
