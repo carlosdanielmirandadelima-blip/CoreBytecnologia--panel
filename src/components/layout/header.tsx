@@ -14,6 +14,9 @@ const pageTitles: Record<string, string> = {
   "/monitoring": "Monitoramento",
   "/volumes": "Volumes",
   "/backups": "Backups",
+  "/servers": "Servidores",
+  "/dns": "DNS Cloudflare",
+  "/status-pages": "Status Pages",
   "/teams": "Times",
   "/settings": "Configurações",
 };

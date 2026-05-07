@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  User, Shield, Info, Save, Loader2, Key, Plus, Trash2, Variable,
+  User, Shield, Info, Save, Loader2, Key, Plus, Trash2, Variable, Plug,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +35,8 @@ export default function SettingsPage() {
   const [newEnvValue, setNewEnvValue] = useState("");
   const [newEnvDesc, setNewEnvDesc] = useState("");
   const [addingEnv, setAddingEnv] = useState(false);
+  const [cfToken, setCfToken] = useState("");
+  const [savingCf, setSavingCf] = useState(false);
 
   useEffect(() => {
     if (session?.user) {
@@ -54,6 +56,24 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { fetchGlobalEnv(); }, [fetchGlobalEnv]);
+
+  useEffect(() => {
+    fetch("/api/settings?key=cloudflare_api_token").then(r => r.json()).then(d => { if (d.value) setCfToken(d.value); }).catch(() => {});
+  }, []);
+
+  const handleSaveCfToken = async () => {
+    setSavingCf(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "cloudflare_api_token", value: cfToken }),
+      });
+      if (res.ok) toast.success("Token Cloudflare salvo!");
+      else toast.error("Erro ao salvar");
+    } catch { toast.error("Erro ao salvar"); }
+    finally { setSavingCf(false); }
+  };
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -159,6 +179,9 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="env" className="data-[state=active]:bg-white/10">
             <Variable className="h-4 w-4 mr-1" /> Variáveis Globais
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="data-[state=active]:bg-white/10">
+            <Plug className="h-4 w-4 mr-1" /> Integrações
           </TabsTrigger>
           <TabsTrigger value="about" className="data-[state=active]:bg-white/10">
             <Info className="h-4 w-4 mr-1" /> Sobre
@@ -268,6 +291,27 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="mt-4">
+          <Card className="bg-[#111] border-white/10">
+            <CardHeader>
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Plug className="h-4 w-4 text-white/50" /> Cloudflare API
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 max-w-lg">
+              <p className="text-xs text-white/30">Configure o token da API Cloudflare para gerenciar DNS. Crie um token em <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" className="text-blue-400 hover:underline">dash.cloudflare.com</a> com permissão de Zone.DNS Edit.</p>
+              <div className="space-y-1">
+                <Label className="text-white/60 text-xs">API Token</Label>
+                <Input type="password" value={cfToken} onChange={(e) => setCfToken(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white font-mono" placeholder="Bearer token..." />
+              </div>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveCfToken} disabled={savingCf}>
+                {savingCf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />} Salvar Token
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

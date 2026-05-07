@@ -20,6 +20,9 @@ import {
   HardDrive,
   Activity,
   Archive,
+  Server,
+  Globe,
+  RadioTower,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +41,9 @@ const navItems = [
   { href: "/monitoring", label: "Monitoramento", icon: Activity },
   { href: "/volumes", label: "Volumes", icon: HardDrive },
   { href: "/backups", label: "Backups", icon: Archive },
+  { href: "/servers", label: "Servidores", icon: Server },
+  { href: "/dns", label: "DNS", icon: Globe },
+  { href: "/status-pages", label: "Status Pages", icon: RadioTower },
   { href: "/teams", label: "Times", icon: Users },
   { href: "/settings", label: "Configurações", icon: Settings },
 ];

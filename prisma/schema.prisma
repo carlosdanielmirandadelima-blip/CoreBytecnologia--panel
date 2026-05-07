@@ -127,3 +127,76 @@ model BackupSchedule {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
+
+model Node {
+  id            String    @id @default(cuid())
+  name          String
+  host          String
+  port          Int       @default(2375)
+  protocol      String    @default("http")
+  tlsCa         String    @default("")
+  tlsCert       String    @default("")
+  tlsKey        String    @default("")
+  status        String    @default("offline")
+  isLocal       Boolean   @default(false)
+  cpuPercent    Float     @default(0)
+  memoryPercent Float     @default(0)
+  diskPercent   Float     @default(0)
+  containers    Int       @default(0)
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model DnsRecord {
+  id            String    @id @default(cuid())
+  zoneId        String
+  zoneName      String
+  recordId      String    @default("")
+  type          String    @default("A")
+  name          String
+  content       String
+  proxied       Boolean   @default(true)
+  ttl           Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusPage {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String    @default("")
+  isPublic      Boolean   @default(true)
+  monitors      StatusMonitor[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusMonitor {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("http")
+  target        String
+  interval      Int       @default(60)
+  timeout       Int       @default(10)
+  status        String    @default("unknown")
+  lastCheck     DateTime?
+  lastResponse  Int       @default(0)
+  uptime24h     Float     @default(100)
+  pageId        String
+  page          StatusPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  checks        StatusCheck[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusCheck {
+  id            String    @id @default(cuid())
+  status        String
+  responseTime  Int       @default(0)
+  message       String    @default("")
+  monitorId     String
+  monitor       StatusMonitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+}
