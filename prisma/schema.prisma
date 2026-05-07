@@ -243,3 +243,72 @@ model AuditLog {
   ipAddress     String    @default("")
   createdAt     DateTime  @default(now())
 }
+
+model Cluster {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("k3s")
+  endpoint      String    @default("")
+  token         String    @default("")
+  status        String    @default("disconnected")
+  version       String    @default("")
+  nodes         Int       @default(0)
+  pods          Int       @default(0)
+  services      Int       @default(0)
+  cpuPercent    Float     @default(0)
+  memoryPercent Float     @default(0)
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ScalingRule {
+  id            String    @id @default(cuid())
+  name          String
+  projectId     String
+  metric        String    @default("cpu")
+  threshold     Float     @default(80)
+  minReplicas   Int       @default(1)
+  maxReplicas   Int       @default(5)
+  cooldown      Int       @default(60)
+  enabled       Boolean   @default(true)
+  currentReplicas Int     @default(1)
+  lastScaled    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Pipeline {
+  id            String    @id @default(cuid())
+  name          String
+  projectId     String
+  trigger       String    @default("manual")
+  status        String    @default("idle")
+  lastRun       DateTime?
+  stages        PipelineStage[]
+  runs          PipelineRun[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PipelineStage {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("build")
+  command       String    @default("")
+  order         Int       @default(0)
+  pipelineId    String
+  pipeline      Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+}
+
+model PipelineRun {
+  id            String    @id @default(cuid())
+  status        String    @default("running")
+  duration      Int       @default(0)
+  logs          String    @default("")
+  pipelineId    String
+  pipeline      Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageResults  String    @default("[]")
+  createdAt     DateTime  @default(now())
+}

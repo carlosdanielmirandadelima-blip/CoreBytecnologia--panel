@@ -25,6 +25,9 @@ import {
   RadioTower,
   Key,
   Puzzle,
+  Network,
+  Scaling,
+  GitBranch,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +49,9 @@ const navItems = [
   { href: "/servers", label: "Servidores", icon: Server },
   { href: "/dns", label: "DNS", icon: Globe },
   { href: "/status-pages", label: "Status Pages", icon: RadioTower },
+  { href: "/clusters", label: "Clusters", icon: Network },
+  { href: "/scaling", label: "Auto Scaling", icon: Scaling },
+  { href: "/pipelines", label: "CI/CD", icon: GitBranch },
   { href: "/api-keys", label: "API Keys", icon: Key },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/teams", label: "Times", icon: Users },
