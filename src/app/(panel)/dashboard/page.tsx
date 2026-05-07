@@ -1,44 +1,49 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Container,
+  Plus,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  Network,
+  ArrowDown,
+  ArrowUp,
+  Clock,
+  FolderOpen,
   Play,
   Square,
-  Pause,
-  Server,
-  HardDrive,
-  Cpu,
   RefreshCw,
+  Server,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
-interface ContainerInfo {
+interface SystemStats {
+  cpu: { cores: number; model: string; percent: number };
+  memory: { total: number; used: number; free: number; percent: number };
+  disk: { total: number; used: number; free: number; percent: number };
+  network: { rxBytes: number; txBytes: number };
+  uptime: number;
+  hostname: string;
+}
+
+interface Project {
   id: string;
-  shortId: string;
   name: string;
-  image: string;
-  state: string;
+  description: string;
+  type: string;
   status: string;
-  ports: { privatePort: number; publicPort?: number; type: string }[];
+  templateId: string;
+  domain: string;
+  services: { id: string; name: string; status: string }[];
+  createdAt: string;
 }
 
-interface SystemInfo {
-  containers: number;
-  containersRunning: number;
-  containersPaused: number;
-  containersStopped: number;
-  images: number;
-  serverVersion: string;
-  operatingSystem: string;
-  totalMemory: number;
-  cpus: number;
-}
-
-function formatBytes(bytes: number) {
+function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
@@ -46,49 +51,59 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 
-function StateIcon({ state }: { state: string }) {
-  switch (state) {
-    case "running":
-      return <Play className="h-3 w-3 fill-current" />;
-    case "exited":
-      return <Square className="h-3 w-3" />;
-    case "paused":
-      return <Pause className="h-3 w-3" />;
-    default:
-      return <Square className="h-3 w-3" />;
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "running": return "bg-green-500";
+    case "stopped": return "bg-gray-500";
+    case "error": return "bg-red-500";
+    case "deploying": return "bg-yellow-500";
+    default: return "bg-gray-500";
   }
 }
 
-function stateBadgeVariant(
-  state: string
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (state) {
-    case "running":
-      return "default";
-    case "exited":
-      return "destructive";
-    case "paused":
-      return "secondary";
-    default:
-      return "outline";
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case "running": return "Rodando";
+    case "stopped": return "Parado";
+    case "error": return "Erro";
+    case "deploying": return "Deployando";
+    default: return status;
   }
+}
+
+function getProgressColor(percent: number): string {
+  if (percent >= 90) return "bg-red-500";
+  if (percent >= 70) return "bg-yellow-500";
+  return "bg-blue-500";
 }
 
 export default function DashboardPage() {
-  const [containers, setContainers] = useState<ContainerInfo[]>([]);
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [containersRes, systemRes] = await Promise.all([
-        fetch("/api/containers"),
-        fetch("/api/system"),
+      const [statsRes, projectsRes] = await Promise.all([
+        fetch("/api/system/stats"),
+        fetch("/api/projects"),
       ]);
-      if (containersRes.ok) setContainers(await containersRes.json());
-      if (systemRes.ok) setSystemInfo(await systemRes.json());
-    } catch (err) {
-      console.error("Error fetching data:", err);
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (projectsRes.ok) {
+        const data = await projectsRes.json();
+        setProjects(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // silently fail
     } finally {
       setLoading(false);
     }
@@ -100,6 +115,26 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  const handleProjectAction = async (id: string, action: string) => {
+    try {
+      const res = await fetch(`/api/projects/${id}/${action}`, { method: "POST" });
+      if (res.ok) {
+        toast.success(action === "deploy" || action === "start" ? "Projeto iniciado!" : "Projeto parado!");
+        fetchData();
+      }
+    } catch {
+      toast.error("Erro na ação");
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm("Remover este projeto e todos os seus containers?")) return;
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      if (res.ok) { toast.success("Projeto removido"); fetchData(); }
+    } catch { toast.error("Erro ao remover"); }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -108,193 +143,195 @@ export default function DashboardPage() {
     );
   }
 
-  const stats = [
-    {
-      label: "Total de Containers",
-      value: systemInfo?.containers || 0,
-      icon: Container,
-      color: "text-blue-400",
-      bg: "bg-blue-400/10",
-    },
-    {
-      label: "Em Execução",
-      value: systemInfo?.containersRunning || 0,
-      icon: Play,
-      color: "text-green-400",
-      bg: "bg-green-400/10",
-    },
-    {
-      label: "Parados",
-      value: systemInfo?.containersStopped || 0,
-      icon: Square,
-      color: "text-red-400",
-      bg: "bg-red-400/10",
-    },
-    {
-      label: "Imagens",
-      value: systemInfo?.images || 0,
-      icon: HardDrive,
-      color: "text-purple-400",
-      bg: "bg-purple-400/10",
-    },
-  ];
-
   return (
     <div className="space-y-6">
+      {/* Server Status Bar */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-          <p className="text-sm text-white/50 mt-1">
-            Visão geral do seu servidor Docker
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-blue-500/10">
+            <Server className="h-5 w-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">{stats?.hostname || "Servidor"}</h2>
+            <div className="flex items-center gap-3 text-xs text-white/40">
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatUptime(stats?.uptime ?? 0)}</span>
+              <span>{stats?.cpu.cores || 0} vCPUs</span>
+              <span>{formatBytes(stats?.memory.total ?? 0)} RAM</span>
+            </div>
+          </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchData}
-          className="border-white/10 text-white/70 hover:text-white hover:bg-white/5"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
+        <Button variant="outline" size="sm" onClick={fetchData} className="border-white/10 text-white/50 hover:text-white">
+          <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card
-            key={stat.label}
-            className="bg-[#111] border-white/10"
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-white/50">{stat.label}</p>
-                  <p className="text-3xl font-bold text-white mt-1">
-                    {stat.value}
-                  </p>
-                </div>
-                <div className={`p-3 rounded-xl ${stat.bg}`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {systemInfo && (
+      {/* Resource Usage - EasyPanel Style */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card className="bg-[#111] border-white/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-white flex items-center gap-2">
-              <Server className="h-4 w-4 text-white/50" />
-              Informações do Servidor
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-white/40">Docker</p>
-                <p className="text-sm text-white mt-0.5">
-                  v{systemInfo.serverVersion}
-                </p>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-4 w-4 text-blue-400" />
+                <span className="text-sm text-white/70">CPU</span>
               </div>
-              <div>
-                <p className="text-xs text-white/40">Sistema</p>
-                <p className="text-sm text-white mt-0.5">
-                  {systemInfo.operatingSystem}
-                </p>
+              <span className="text-sm font-semibold text-white">{stats?.cpu.percent ?? 0}%</span>
+            </div>
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-500 ${getProgressColor(stats?.cpu.percent ?? 0)}`}
+                style={{ width: `${stats?.cpu.percent ?? 0}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#111] border-white/10">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <MemoryStick className="h-4 w-4 text-green-400" />
+                <span className="text-sm text-white/70">Memória</span>
               </div>
-              <div>
-                <p className="text-xs text-white/40 flex items-center gap-1">
-                  <Cpu className="h-3 w-3" /> CPUs
-                </p>
-                <p className="text-sm text-white mt-0.5">{systemInfo.cpus}</p>
+              <span className="text-sm font-semibold text-white">{stats?.memory.percent ?? 0}%</span>
+            </div>
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-500 ${getProgressColor(stats?.memory.percent ?? 0)}`}
+                style={{ width: `${stats?.memory.percent ?? 0}%` }} />
+            </div>
+            <p className="text-[10px] text-white/30 mt-1.5">{formatBytes(stats?.memory.used ?? 0)} / {formatBytes(stats?.memory.total ?? 0)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#111] border-white/10">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <HardDrive className="h-4 w-4 text-yellow-400" />
+                <span className="text-sm text-white/70">Disco</span>
               </div>
-              <div>
-                <p className="text-xs text-white/40">Memória Total</p>
-                <p className="text-sm text-white mt-0.5">
-                  {formatBytes(systemInfo.totalMemory)}
-                </p>
+              <span className="text-sm font-semibold text-white">{stats?.disk.percent ?? 0}%</span>
+            </div>
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-500 ${getProgressColor(stats?.disk.percent ?? 0)}`}
+                style={{ width: `${stats?.disk.percent ?? 0}%` }} />
+            </div>
+            <p className="text-[10px] text-white/30 mt-1.5">{formatBytes(stats?.disk.used ?? 0)} / {formatBytes(stats?.disk.total ?? 0)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#111] border-white/10">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Network className="h-4 w-4 text-purple-400" />
+                <span className="text-sm text-white/70">Rede</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-xs text-white/40">
+                  <ArrowDown className="h-3 w-3 text-green-400" /> Download
+                </span>
+                <span className="text-xs text-white font-medium">{formatBytes(stats?.network.rxBytes ?? 0)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-xs text-white/40">
+                  <ArrowUp className="h-3 w-3 text-blue-400" /> Upload
+                </span>
+                <span className="text-xs text-white font-medium">{formatBytes(stats?.network.txBytes ?? 0)}</span>
               </div>
             </div>
           </CardContent>
         </Card>
-      )}
+      </div>
 
-      <Card className="bg-[#111] border-white/10">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base text-white flex items-center gap-2">
-              <Container className="h-4 w-4 text-white/50" />
-              Containers Recentes
-            </CardTitle>
-            <Link href="/containers">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white/50 hover:text-white"
-              >
-                Ver todos
-              </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {containers.length === 0 ? (
-            <div className="text-center py-8">
-              <Container className="h-12 w-12 text-white/10 mx-auto" />
-              <p className="text-sm text-white/40 mt-3">
-                Nenhum container encontrado
-              </p>
-              <p className="text-xs text-white/30 mt-1">
-                Os containers Docker aparecerão aqui
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {containers.slice(0, 8).map((container) => (
-                <Link
-                  key={container.id}
-                  href={`/containers/${container.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-colors group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`h-2 w-2 rounded-full ${
-                        container.state === "running"
-                          ? "bg-green-400"
-                          : container.state === "exited"
-                          ? "bg-red-400"
-                          : "bg-yellow-400"
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm text-white font-medium truncate group-hover:text-blue-400 transition-colors">
-                        {container.name}
-                      </p>
-                      <p className="text-xs text-white/40 truncate">
-                        {container.image}
-                      </p>
-                    </div>
+      {/* Projects Section - EasyPanel Style */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-white/50" /> Projetos
+          </h3>
+          <Link href="/projects/new">
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Novo Projeto
+            </Button>
+          </Link>
+        </div>
+
+        {projects.length === 0 ? (
+          <Card className="bg-[#111] border-white/10 border-dashed">
+            <CardContent className="py-12 text-center">
+              <FolderOpen className="h-10 w-10 text-white/10 mx-auto" />
+              <p className="text-sm text-white/40 mt-3">Nenhum projeto criado</p>
+              <p className="text-xs text-white/25 mt-1">Crie um projeto a partir de templates ou containers customizados</p>
+              <Link href="/projects/new">
+                <Button size="sm" className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Criar Projeto
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {projects.map((project) => (
+              <Card key={project.id} className="bg-[#111] border-white/10 hover:border-white/20 transition-all group">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${getStatusColor(project.status)}`} />
+                        <h4 className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors">
+                          {project.name}
+                        </h4>
+                      </div>
+                      {project.description && (
+                        <p className="text-xs text-white/30 mt-1 truncate ml-4">{project.description}</p>
+                      )}
+                    </Link>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      variant={stateBadgeVariant(container.state)}
-                      className="text-[10px] gap-1"
-                    >
-                      <StateIcon state={container.state} />
-                      {container.state}
-                    </Badge>
-                    <span className="text-[10px] text-white/30 font-mono">
-                      {container.shortId}
+
+                  <div className="flex items-center gap-2 mb-3 ml-4">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-white/40">
+                      {project.type === "template" ? project.templateId : project.type}
+                    </span>
+                    <span className="text-[10px] text-white/30">
+                      {project.services.length} serviço{project.services.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-[10px] text-white/20">
+                      {getStatusLabel(project.status)}
                     </span>
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
+                  {project.domain && (
+                    <p className="text-xs text-blue-400/60 mb-3 ml-4 truncate">{project.domain}</p>
+                  )}
+
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-white/5">
+                    {project.status === "running" ? (
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        onClick={() => handleProjectAction(project.id, "stop")}>
+                        <Square className="h-3 w-3 mr-1" /> Parar
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                        onClick={() => handleProjectAction(project.id, "deploy")}>
+                        <Play className="h-3 w-3 mr-1" /> Deploy
+                      </Button>
+                    )}
+                    <Link href={`/projects/${project.id}`} className="ml-auto">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-white/40 hover:text-white">
+                        Detalhes →
+                      </Button>
+                    </Link>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400/50 hover:text-red-400 hover:bg-red-500/10"
+                      onClick={() => handleDeleteProject(project.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

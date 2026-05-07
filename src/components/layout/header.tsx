@@ -7,8 +7,13 @@ import { Input } from "@/components/ui/input";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/projects": "Projetos",
+  "/compose": "Editor Compose",
   "/containers": "Containers",
   "/images": "Imagens",
+  "/monitoring": "Monitoramento",
+  "/volumes": "Volumes",
+  "/teams": "Times",
   "/settings": "Configurações",
 };
 
@@ -17,6 +22,9 @@ export default function Header() {
 
   const getTitle = () => {
     if (pathname.startsWith("/containers/")) return "Detalhes do Container";
+    if (pathname.startsWith("/projects/") && pathname !== "/projects/new") return "Detalhes do Projeto";
+    if (pathname === "/projects/new") return "Novo Projeto";
+    if (pathname.startsWith("/teams/")) return "Detalhes do Time";
     return pageTitles[pathname] || "CoreByte Panel";
   };
 
