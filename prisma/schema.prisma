@@ -312,3 +312,68 @@ model PipelineRun {
   stageResults  String    @default("[]")
   createdAt     DateTime  @default(now())
 }
+
+model DynamicDns {
+  id            String    @id @default(cuid())
+  hostname      String
+  type          String    @default("A")
+  currentIp     String    @default("")
+  lastIp        String    @default("")
+  provider      String    @default("cloudflare")
+  zoneId        String    @default("")
+  recordId      String    @default("")
+  token         String    @default("")
+  interval      Int       @default(300)
+  enabled       Boolean   @default(true)
+  lastUpdate    DateTime?
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model BuildJob {
+  id            String    @id @default(cuid())
+  name          String
+  source        String    @default("dockerfile")
+  dockerfile    String    @default("Dockerfile")
+  context       String    @default(".")
+  gitUrl        String    @default("")
+  gitBranch     String    @default("main")
+  imageName     String    @default("")
+  imageTag      String    @default("latest")
+  status        String    @default("pending")
+  logs          String    @default("")
+  duration      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AppTemplate {
+  id            String    @id @default(cuid())
+  name          String
+  description   String    @default("")
+  category      String    @default("other")
+  icon          String    @default("")
+  image         String
+  ports         String    @default("[]")
+  envVars       String    @default("[]")
+  volumes       String    @default("[]")
+  featured      Boolean   @default(false)
+  downloads     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Migration {
+  id            String    @id @default(cuid())
+  containerId   String
+  containerName String
+  sourceServer  String    @default("local")
+  targetServer  String
+  status        String    @default("pending")
+  progress      Int       @default(0)
+  logs          String    @default("")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+}

@@ -28,6 +28,11 @@ import {
   Network,
   Scaling,
   GitBranch,
+  Wifi,
+  Hammer,
+  ArrowRightLeft,
+  Store,
+  ScrollText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +57,11 @@ const navItems = [
   { href: "/clusters", label: "Clusters", icon: Network },
   { href: "/scaling", label: "Auto Scaling", icon: Scaling },
   { href: "/pipelines", label: "CI/CD", icon: GitBranch },
+  { href: "/dynamic-dns", label: "DNS Dinâmico", icon: Wifi },
+  { href: "/builds", label: "Builds", icon: Hammer },
+  { href: "/migrations", label: "Migrações", icon: ArrowRightLeft },
+  { href: "/templates", label: "Marketplace", icon: Store },
+  { href: "/audit-log", label: "Audit Log", icon: ScrollText },
   { href: "/api-keys", label: "API Keys", icon: Key },
   { href: "/plugins", label: "Plugins", icon: Puzzle },
   { href: "/teams", label: "Times", icon: Users },
