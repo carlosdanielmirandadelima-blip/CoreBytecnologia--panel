@@ -377,3 +377,22 @@ model Migration {
   completedAt   DateTime?
   createdAt     DateTime  @default(now())
 }
+
+model Notification {
+  id            String    @id @default(cuid())
+  title         String
+  message       String
+  type          String    @default("info")
+  read          Boolean   @default(false)
+  userId        String    @default("")
+  createdAt     DateTime  @default(now())
+}
+
+model Shortcut {
+  id            String    @id @default(cuid())
+  key           String
+  action        String
+  label         String
+  enabled       Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+}

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import FooterBrand from "@/components/layout/footer-brand";
+import KeyboardShortcuts from "@/components/keyboard-shortcuts";
 
 export default function PanelLayout({
   children,
@@ -42,6 +43,7 @@ export default function PanelLayout({
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
         <FooterBrand />
       </div>
+      <KeyboardShortcuts />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   User, Shield, Info, Save, Loader2, Key, Plus, Trash2, Variable, Plug, Smartphone,
+  Download, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -230,6 +231,9 @@ export default function SettingsPage() {
           <TabsTrigger value="integrations" className="data-[state=active]:bg-white/10">
             <Plug className="h-4 w-4 mr-1" /> Integrações
           </TabsTrigger>
+          <TabsTrigger value="export" className="data-[state=active]:bg-white/10">
+            <Download className="h-4 w-4 mr-1" /> Exportar/Importar
+          </TabsTrigger>
           <TabsTrigger value="about" className="data-[state=active]:bg-white/10">
             <Info className="h-4 w-4 mr-1" /> Sobre
           </TabsTrigger>
@@ -415,6 +419,54 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="export" className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-[#111] border-white/10">
+              <CardHeader>
+                <CardTitle className="text-base text-white flex items-center gap-2">
+                  <Download className="h-4 w-4 text-blue-400" /> Exportar Dados
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-white/30">Exporte todas as configurações, projetos, variáveis e regras do painel em formato JSON.</p>
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+                  window.open("/api/export", "_blank");
+                  toast.success("Exportação iniciada!");
+                }}>
+                  <Download className="h-3.5 w-3.5 mr-1" /> Exportar JSON
+                </Button>
+              </CardContent>
+            </Card>
+            <Card className="bg-[#111] border-white/10">
+              <CardHeader>
+                <CardTitle className="text-base text-white flex items-center gap-2">
+                  <Upload className="h-4 w-4 text-green-400" /> Importar Dados
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-white/30">Importe configurações de um arquivo JSON exportado anteriormente.</p>
+                <input type="file" accept=".json" className="text-xs text-white/50 file:bg-white/10 file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-xs file:mr-2 file:cursor-pointer" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    const res = await fetch("/api/import", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (res.ok) {
+                      const result = await res.json();
+                      toast.success(`Importado: ${Object.entries(result.imported || {}).map(([k, v]) => `${k}: ${v}`).join(", ") || "OK"}`);
+                    } else toast.error("Erro ao importar");
+                  } catch { toast.error("Arquivo inválido"); }
+                }} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="about" className="mt-4">

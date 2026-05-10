@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import NotificationBell from "@/components/notifications/notification-bell";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -53,13 +53,7 @@ export default function Header() {
             className="w-64 pl-9 h-9 bg-white/5 border-white/10 text-white placeholder:text-white/40 text-sm"
           />
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 text-white/50 hover:text-white hover:bg-white/10"
-        >
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationBell />
       </div>
     </header>
   );

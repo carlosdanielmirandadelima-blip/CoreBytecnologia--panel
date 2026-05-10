@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import SessionProvider from "@/components/providers/session-provider";
@@ -11,7 +11,20 @@ export const metadata: Metadata = {
   title: "CoreByte Panel",
   description:
     "Painel de gerenciamento Docker - CoreByte Tecnologia",
-  icons: { icon: "/assets/logo-black.png" },
+  icons: { icon: "/assets/logo-black.png", apple: "/assets/logo-black.png" },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "CoreByte Panel",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
