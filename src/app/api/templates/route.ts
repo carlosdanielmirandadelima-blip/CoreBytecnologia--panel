@@ -24,12 +24,22 @@ const defaultTemplates = [
   { name: "Ghost", description: "Plataforma de publicação profissional", category: "cms", icon: "👻", image: "ghost:latest", ports: '["2368:2368"]', volumes: '["ghost_data:/var/lib/ghost/content"]' },
   { name: "Mattermost", description: "Plataforma de comunicação de equipe", category: "communication", icon: "💬", image: "mattermost/mattermost-team-edition:latest", ports: '["8065:8065"]', volumes: '["mattermost_data:/mattermost/data"]' },
   { name: "Vault", description: "Gerenciamento de secrets da HashiCorp", category: "security", icon: "🔐", image: "hashicorp/vault:latest", ports: '["8200:8200"]', envVars: '[{"key":"VAULT_DEV_ROOT_TOKEN_ID","value":"myroot"}]' },
+  { name: "Evolution API", description: "API para WhatsApp multi-device com baileys", category: "communication", icon: "📱", image: "atrevido/evolution-api:latest", ports: '["8080:8080"]', envVars: '[{"key":"AUTHENTICATION_API_KEY","value":"changeme"},{"key":"DATABASE_PROVIDER","value":"postgresql"},{"key":"DATABASE_CONNECTION_URI","value":"postgresql://user:pass@db:5432/evolution"}]', volumes: '["evolution_store:/evolution/store","evolution_instances:/evolution/instances"]', featured: true },
+  { name: "Typebot", description: "Construtor de chatbots conversacionais", category: "automation", icon: "🤖", image: "baptistearno/typebot-builder:latest", ports: '["3000:3000"]', envVars: '[{"key":"DATABASE_URL","value":"postgresql://user:pass@db:5432/typebot"},{"key":"NEXTAUTH_URL","value":"http://localhost:3000"}]' },
+  { name: "Chatwoot", description: "Plataforma de atendimento ao cliente omnichannel", category: "communication", icon: "💬", image: "chatwoot/chatwoot:latest", ports: '["3000:3000"]', envVars: '[{"key":"SECRET_KEY_BASE","value":"changeme"},{"key":"RAILS_ENV","value":"production"}]', volumes: '["chatwoot_data:/app/storage"]' },
+  { name: "Dify", description: "Plataforma de desenvolvimento de apps com IA/LLM", category: "automation", icon: "🧠", image: "langgenius/dify-web:latest", ports: '["3000:3000"]', featured: true },
+  { name: "Nocodb", description: "Alternativa open-source ao Airtable", category: "database", icon: "📋", image: "nocodb/nocodb:latest", ports: '["8080:8080"]', volumes: '["nocodb_data:/usr/app/data"]', envVars: '[{"key":"NC_DB","value":"pg://db:5432?u=user&p=pass&d=nocodb"}]' },
+  { name: "Metabase", description: "Business intelligence e dashboards de dados", category: "monitoring", icon: "📊", image: "metabase/metabase:latest", ports: '["3000:3000"]', volumes: '["metabase_data:/metabase-data"]' },
+  { name: "Strapi", description: "CMS headless open-source com API REST e GraphQL", category: "cms", icon: "🚀", image: "strapi/strapi:latest", ports: '["1337:1337"]', volumes: '["strapi_data:/srv/app"]' },
+  { name: "Appsmith", description: "Plataforma low-code para construir apps internos", category: "automation", icon: "⚡", image: "appsmith/appsmith-ce:latest", ports: '["80:80","443:443"]', volumes: '["appsmith_data:/appsmith-stacks"]' },
+  { name: "Directus", description: "Plataforma de dados com API REST e GraphQL", category: "cms", icon: "🐇", image: "directus/directus:latest", ports: '["8055:8055"]', envVars: '[{"key":"KEY","value":"changeme"},{"key":"SECRET","value":"changeme"},{"key":"DB_CLIENT","value":"pg"}]', volumes: '["directus_data:/directus/uploads"]' },
+  { name: "Supabase", description: "Alternativa open-source ao Firebase", category: "database", icon: "⚡", image: "supabase/postgres:latest", ports: '["5432:5432","8000:8000"]', envVars: '[{"key":"POSTGRES_PASSWORD","value":"changeme"}]', volumes: '["supabase_data:/var/lib/postgresql/data"]', featured: true },
 ];
 
 async function initTemplates() {
-  const count = await prisma.appTemplate.count();
-  if (count === 0) {
-    for (const t of defaultTemplates) {
+  for (const t of defaultTemplates) {
+    const exists = await prisma.appTemplate.findFirst({ where: { name: t.name } });
+    if (!exists) {
       await prisma.appTemplate.create({ data: t });
     }
   }
