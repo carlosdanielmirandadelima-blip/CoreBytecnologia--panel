@@ -4,7 +4,6 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,18 +109,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-white/40">
-              Não tem conta?{" "}
-              <Link
-                href="/register"
-                className="text-white/70 hover:text-white underline"
-              >
-                Criar conta
-              </Link>
-            </p>
-          </div>
 
           <div className="mt-8 pt-4 border-t border-white/5 flex items-center justify-center gap-2">
             <img
