@@ -1,0 +1,398 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  email         String        @unique
+  password      String
+  role          String        @default("admin")
+  avatarUrl     String        @default("")
+  twoFactorSecret String      @default("")
+  twoFactorEnabled Boolean    @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  teamMembers   TeamMember[]
+  apiKeys       ApiKey[]
+}
+
+model Team {
+  id            String        @id @default(cuid())
+  name          String
+  description   String        @default("")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  members       TeamMember[]
+}
+
+model TeamMember {
+  id            String    @id @default(cuid())
+  role          String    @default("member")
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId        String
+  team          Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, teamId])
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  description   String    @default("")
+  type          String    @default("custom")
+  status        String    @default("stopped")
+  gitUrl        String    @default("")
+  branch        String    @default("main")
+  templateId    String    @default("")
+  composeFile   String    @default("")
+  domain        String    @default("")
+  teamId        String    @default("")
+  environment   String    @default("production")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  services      Service[]
+  envVars       EnvVar[]
+}
+
+model Service {
+  id            String    @id @default(cuid())
+  name          String
+  image         String
+  containerId   String    @default("")
+  status        String    @default("stopped")
+  ports         String    @default("")
+  volumes       String    @default("")
+  command       String    @default("")
+  replicas      Int       @default(1)
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model EnvVar {
+  id            String    @id @default(cuid())
+  key           String
+  value         String
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model GlobalEnvVar {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  value         String
+  description   String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Setting {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  value         String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Backup {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("volume")
+  source        String
+  fileName      String
+  filePath      String
+  fileSize      Int       @default(0)
+  status        String    @default("pending")
+  scheduleId    String?
+  schedule      BackupSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+}
+
+model BackupSchedule {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("volume")
+  source        String
+  cron          String    @default("0 2 * * *")
+  retention     Int       @default(7)
+  enabled       Boolean   @default(true)
+  lastRun       DateTime?
+  nextRun       DateTime?
+  backups       Backup[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Node {
+  id            String    @id @default(cuid())
+  name          String
+  host          String
+  port          Int       @default(2375)
+  protocol      String    @default("http")
+  tlsCa         String    @default("")
+  tlsCert       String    @default("")
+  tlsKey        String    @default("")
+  status        String    @default("offline")
+  isLocal       Boolean   @default(false)
+  cpuPercent    Float     @default(0)
+  memoryPercent Float     @default(0)
+  diskPercent   Float     @default(0)
+  containers    Int       @default(0)
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model DnsRecord {
+  id            String    @id @default(cuid())
+  zoneId        String
+  zoneName      String
+  recordId      String    @default("")
+  type          String    @default("A")
+  name          String
+  content       String
+  proxied       Boolean   @default(true)
+  ttl           Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusPage {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String    @default("")
+  isPublic      Boolean   @default(true)
+  monitors      StatusMonitor[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusMonitor {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("http")
+  target        String
+  interval      Int       @default(60)
+  timeout       Int       @default(10)
+  status        String    @default("unknown")
+  lastCheck     DateTime?
+  lastResponse  Int       @default(0)
+  uptime24h     Float     @default(100)
+  pageId        String
+  page          StatusPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  checks        StatusCheck[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StatusCheck {
+  id            String    @id @default(cuid())
+  status        String
+  responseTime  Int       @default(0)
+  message       String    @default("")
+  monitorId     String
+  monitor       StatusMonitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  name          String
+  key           String    @unique
+  prefix        String    @default("")
+  permissions   String    @default("read")
+  lastUsed      DateTime?
+  expiresAt     DateTime?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Plugin {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  displayName   String
+  description   String    @default("")
+  version       String    @default("1.0.0")
+  icon          String    @default("puzzle")
+  enabled       Boolean   @default(false)
+  config        String    @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  action        String
+  resource      String
+  resourceId    String    @default("")
+  details       String    @default("")
+  userId        String    @default("")
+  userName      String    @default("")
+  ipAddress     String    @default("")
+  createdAt     DateTime  @default(now())
+}
+
+model Cluster {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("k3s")
+  endpoint      String    @default("")
+  token         String    @default("")
+  status        String    @default("disconnected")
+  version       String    @default("")
+  nodes         Int       @default(0)
+  pods          Int       @default(0)
+  services      Int       @default(0)
+  cpuPercent    Float     @default(0)
+  memoryPercent Float     @default(0)
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ScalingRule {
+  id            String    @id @default(cuid())
+  name          String
+  projectId     String
+  metric        String    @default("cpu")
+  threshold     Float     @default(80)
+  minReplicas   Int       @default(1)
+  maxReplicas   Int       @default(5)
+  cooldown      Int       @default(60)
+  enabled       Boolean   @default(true)
+  currentReplicas Int     @default(1)
+  lastScaled    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Pipeline {
+  id            String    @id @default(cuid())
+  name          String
+  projectId     String
+  trigger       String    @default("manual")
+  status        String    @default("idle")
+  lastRun       DateTime?
+  stages        PipelineStage[]
+  runs          PipelineRun[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PipelineStage {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    @default("build")
+  command       String    @default("")
+  order         Int       @default(0)
+  pipelineId    String
+  pipeline      Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+}
+
+model PipelineRun {
+  id            String    @id @default(cuid())
+  status        String    @default("running")
+  duration      Int       @default(0)
+  logs          String    @default("")
+  pipelineId    String
+  pipeline      Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageResults  String    @default("[]")
+  createdAt     DateTime  @default(now())
+}
+
+model DynamicDns {
+  id            String    @id @default(cuid())
+  hostname      String
+  type          String    @default("A")
+  currentIp     String    @default("")
+  lastIp        String    @default("")
+  provider      String    @default("cloudflare")
+  zoneId        String    @default("")
+  recordId      String    @default("")
+  token         String    @default("")
+  interval      Int       @default(300)
+  enabled       Boolean   @default(true)
+  lastUpdate    DateTime?
+  lastCheck     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model BuildJob {
+  id            String    @id @default(cuid())
+  name          String
+  source        String    @default("dockerfile")
+  dockerfile    String    @default("Dockerfile")
+  context       String    @default(".")
+  gitUrl        String    @default("")
+  gitBranch     String    @default("main")
+  imageName     String    @default("")
+  imageTag      String    @default("latest")
+  status        String    @default("pending")
+  logs          String    @default("")
+  duration      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AppTemplate {
+  id            String    @id @default(cuid())
+  name          String
+  description   String    @default("")
+  category      String    @default("other")
+  icon          String    @default("")
+  image         String
+  ports         String    @default("[]")
+  envVars       String    @default("[]")
+  volumes       String    @default("[]")
+  featured      Boolean   @default(false)
+  downloads     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Migration {
+  id            String    @id @default(cuid())
+  containerId   String
+  containerName String
+  sourceServer  String    @default("local")
+  targetServer  String
+  status        String    @default("pending")
+  progress      Int       @default(0)
+  logs          String    @default("")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model Notification {
+  id            String    @id @default(cuid())
+  title         String
+  message       String
+  type          String    @default("info")
+  read          Boolean   @default(false)
+  userId        String    @default("")
+  createdAt     DateTime  @default(now())
+}
+
+model Shortcut {
+  id            String    @id @default(cuid())
+  key           String
+  action        String
+  label         String
+  enabled       Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+}
