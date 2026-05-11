@@ -13,6 +13,16 @@ export async function POST(req: Request) {
       );
     }
 
+    const userCount = await prisma.user.count();
+
+    // Only allow registration if no users exist (first user = admin)
+    if (userCount > 0) {
+      return NextResponse.json(
+        { error: "Registro desabilitado. Contate o administrador." },
+        { status: 403 }
+      );
+    }
+
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json(
@@ -23,14 +33,12 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const userCount = await prisma.user.count();
-
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: userCount === 0 ? "admin" : "user",
+        role: "admin",
       },
     });
 
