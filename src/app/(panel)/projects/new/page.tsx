@@ -33,6 +33,7 @@ interface Template {
   description: string;
   icon: string;
   category: string;
+  image: string;
   services: { name: string; image: string; ports: string; volumes: string; command: string }[];
   envVars: { key: string; value: string; description: string }[];
 }
@@ -74,7 +75,23 @@ export default function NewProjectPage() {
   useEffect(() => {
     fetch("/api/templates")
       .then((r) => r.json())
-      .then((data) => setTemplates(Array.isArray(data) ? data : []))
+      .then((data) => {
+        if (!Array.isArray(data)) { setTemplates([]); return; }
+        const parsed = data.map((t: Record<string, unknown>) => {
+          let parsedEnvVars: { key: string; value: string; description: string }[] = [];
+          try { parsedEnvVars = typeof t.envVars === "string" ? JSON.parse(t.envVars as string) : (Array.isArray(t.envVars) ? t.envVars : []); } catch { parsedEnvVars = []; }
+          let parsedPorts: string[] = [];
+          try { parsedPorts = typeof t.ports === "string" ? JSON.parse(t.ports as string) : (Array.isArray(t.ports) ? t.ports : []); } catch { parsedPorts = []; }
+          let parsedVolumes: string[] = [];
+          try { parsedVolumes = typeof t.volumes === "string" ? JSON.parse(t.volumes as string) : (Array.isArray(t.volumes) ? t.volumes : []); } catch { parsedVolumes = []; }
+          return {
+            ...t,
+            services: Array.isArray(t.services) ? t.services : [{ name: t.name, image: t.image || "", ports: parsedPorts.join(","), volumes: parsedVolumes.join(","), command: "" }],
+            envVars: parsedEnvVars,
+          };
+        });
+        setTemplates(parsed);
+      })
       .catch(() => toast.error("Erro ao carregar templates"));
   }, []);
 
@@ -82,7 +99,8 @@ export default function NewProjectPage() {
     setSelectedTemplate(template);
     setName(template.name.toLowerCase().replace(/\s+/g, "-"));
     setDescription(template.description);
-    setEnvVars(template.envVars.map((ev) => ({ key: ev.key, value: ev.value })));
+    const ev = Array.isArray(template.envVars) ? template.envVars : [];
+    setEnvVars(ev.map((e) => ({ key: e.key, value: e.value })));
   };
 
   const addEnvVar = () => {
@@ -262,9 +280,9 @@ export default function NewProjectPage() {
                             <h4 className="text-white font-medium">{template.name}</h4>
                             <p className="text-sm text-white/40">{template.description}</p>
                             <div className="flex gap-1 mt-1">
-                              {template.services.map((s) => (
+                              {(template.services || []).map((s) => (
                                 <Badge key={s.name} variant="outline" className="text-[10px] text-white/30 border-white/10">
-                                  {s.image.split(":")[0]}
+                                  {(s.image || "").split(":")[0]}
                                 </Badge>
                               ))}
                             </div>
