@@ -130,6 +130,24 @@ model BackupSchedule {
   backups       Backup[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  cloudDestination String? // cloud provider id to upload to
+}
+
+model CloudProvider {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    // google_drive, dropbox, terabox
+  accessToken   String?
+  refreshToken  String?
+  clientId      String?
+  clientSecret  String?
+  folder        String?   // remote folder path
+  enabled       Boolean   @default(true)
+  autoBackup    Boolean   @default(false)
+  autoFrequency String    @default("daily") // daily, weekly, monthly
+  lastSync      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Node {
