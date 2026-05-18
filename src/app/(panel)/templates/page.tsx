@@ -45,6 +45,32 @@ const categories = [
   { key: "security", label: "Segurança" },
 ];
 
+function TemplateIcon({ icon, name }: { icon: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const isUrl = icon?.startsWith("http");
+
+  if (isUrl && !failed) {
+    return (
+      <img
+        src={icon}
+        alt={name}
+        className="w-8 h-8 rounded object-contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  if (isUrl && failed) {
+    return (
+      <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-white font-bold text-sm">
+        {name.charAt(0)}
+      </div>
+    );
+  }
+
+  return <span className="text-2xl flex w-8 h-8 items-center justify-center">{icon}</span>;
+}
+
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<TemplateData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +179,7 @@ export default function TemplatesPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">{t.icon}</span>
+                    <TemplateIcon icon={t.icon} name={t.name} />
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium text-white">{t.name}</span>
