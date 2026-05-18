@@ -18,6 +18,10 @@ import {
   Pause,
   RefreshCw,
   FolderArchive,
+  Cloud,
+  CloudUpload,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,6 +55,22 @@ interface Volume {
   Name: string;
   Driver: string;
   Mountpoint: string;
+}
+
+interface CloudProvider {
+  id: string;
+  name: string;
+  type: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
+  folder: string | null;
+  enabled: boolean;
+  autoBackup: boolean;
+  autoFrequency: string;
+  lastSync: string | null;
+  createdAt: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -99,12 +119,31 @@ function statusBadge(status: string) {
   }
 }
 
+function cloudTypeLabel(type: string) {
+  switch (type) {
+    case "google_drive": return "Google Drive";
+    case "dropbox": return "Dropbox";
+    case "terabox": return "Terabox";
+    default: return type;
+  }
+}
+
+function cloudTypeIcon(type: string) {
+  switch (type) {
+    case "google_drive": return "🟢";
+    case "dropbox": return "🔵";
+    case "terabox": return "🟡";
+    default: return "☁️";
+  }
+}
+
 export default function BackupsPage() {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [schedules, setSchedules] = useState<BackupSchedule[]>([]);
   const [volumes, setVolumes] = useState<Volume[]>([]);
+  const [cloudProviders, setCloudProviders] = useState<CloudProvider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"backups" | "schedules">("backups");
+  const [tab, setTab] = useState<"backups" | "schedules" | "cloud">("backups");
 
   // New backup form
   const [showNewBackup, setShowNewBackup] = useState(false);
@@ -120,12 +159,25 @@ export default function BackupsPage() {
   const [scheduleCron, setScheduleCron] = useState("0 2 * * *");
   const [scheduleRetention, setScheduleRetention] = useState(7);
 
+  // New cloud provider form
+  const [showNewCloud, setShowNewCloud] = useState(false);
+  const [cloudName, setCloudName] = useState("");
+  const [cloudType, setCloudType] = useState("google_drive");
+  const [cloudToken, setCloudToken] = useState("");
+  const [cloudFolder, setCloudFolder] = useState("/CoreByte-Backups");
+  const [cloudAutoBackup, setCloudAutoBackup] = useState(false);
+  const [cloudAutoFrequency, setCloudAutoFrequency] = useState("daily");
+
+  // Upload to cloud
+  const [uploadingBackupId, setUploadingBackupId] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
-      const [bRes, sRes, vRes] = await Promise.all([
+      const [bRes, sRes, vRes, cRes] = await Promise.all([
         fetch("/api/backups"),
         fetch("/api/backups/schedules"),
         fetch("/api/volumes"),
+        fetch("/api/cloud-providers"),
       ]);
       if (bRes.ok) setBackups(await bRes.json());
       if (sRes.ok) setSchedules(await sRes.json());
@@ -133,6 +185,7 @@ export default function BackupsPage() {
         const data = await vRes.json();
         setVolumes(Array.isArray(data) ? data : []);
       }
+      if (cRes.ok) setCloudProviders(await cRes.json());
     } catch {
       // silent
     } finally {
@@ -201,6 +254,105 @@ export default function BackupsPage() {
     }
   };
 
+  const createCloudProvider = async () => {
+    if (!cloudName || !cloudToken) {
+      toast.error("Preencha nome e token de acesso");
+      return;
+    }
+    try {
+      const res = await fetch("/api/cloud-providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cloudName,
+          type: cloudType,
+          accessToken: cloudToken,
+          folder: cloudFolder,
+          autoBackup: cloudAutoBackup,
+          autoFrequency: cloudAutoFrequency,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Provedor de nuvem adicionado!");
+        setShowNewCloud(false);
+        setCloudName("");
+        setCloudToken("");
+        setCloudFolder("/CoreByte-Backups");
+        setCloudAutoBackup(false);
+        fetchData();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Erro");
+      }
+    } catch {
+      toast.error("Erro ao adicionar provedor");
+    }
+  };
+
+  const uploadToCloud = async (backupId: string, providerId: string) => {
+    setUploadingBackupId(backupId);
+    try {
+      const res = await fetch(`/api/backups/${backupId}/upload-cloud`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "Backup enviado para a nuvem!");
+        fetchData();
+      } else {
+        toast.error(data.error || "Erro ao enviar");
+      }
+    } catch {
+      toast.error("Erro ao enviar para a nuvem");
+    } finally {
+      setUploadingBackupId(null);
+    }
+  };
+
+  const toggleCloudProvider = async (id: string, enabled: boolean) => {
+    try {
+      await fetch(`/api/cloud-providers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !enabled }),
+      });
+      fetchData();
+    } catch {
+      toast.error("Erro");
+    }
+  };
+
+  const updateCloudAutoBackup = async (id: string, autoBackup: boolean, autoFrequency?: string) => {
+    try {
+      const body: Record<string, unknown> = { autoBackup };
+      if (autoFrequency) body.autoFrequency = autoFrequency;
+      await fetch(`/api/cloud-providers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      fetchData();
+      toast.success(autoBackup ? "Backup automático ativado!" : "Backup automático desativado");
+    } catch {
+      toast.error("Erro");
+    }
+  };
+
+  const deleteCloudProvider = async (id: string) => {
+    if (!confirm("Remover este provedor de nuvem?")) return;
+    try {
+      const res = await fetch(`/api/cloud-providers/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Provedor removido");
+        fetchData();
+      }
+    } catch {
+      toast.error("Erro ao remover");
+    }
+  };
+
   const restoreBackup = async (id: string) => {
     if (!confirm("Restaurar este backup? Os dados atuais do volume serão substituídos.")) return;
     try {
@@ -264,7 +416,7 @@ export default function BackupsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Backups</h2>
-          <p className="text-sm text-white/50 mt-1">Gerencie backups e agendamentos</p>
+          <p className="text-sm text-white/50 mt-1">Gerencie backups, agendamentos e armazenamento na nuvem</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}
@@ -272,9 +424,13 @@ export default function BackupsPage() {
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
           <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => tab === "backups" ? setShowNewBackup(true) : setShowNewSchedule(true)}>
+            onClick={() => {
+              if (tab === "backups") setShowNewBackup(true);
+              else if (tab === "schedules") setShowNewSchedule(true);
+              else setShowNewCloud(true);
+            }}>
             <Plus className="h-3.5 w-3.5 mr-1" />
-            {tab === "backups" ? "Novo Backup" : "Novo Agendamento"}
+            {tab === "backups" ? "Novo Backup" : tab === "schedules" ? "Novo Agendamento" : "Adicionar Nuvem"}
           </Button>
         </div>
       </div>
@@ -290,6 +446,11 @@ export default function BackupsPage() {
           className={`px-4 py-1.5 rounded-md text-sm transition-colors ${tab === "schedules" ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
           <CalendarClock className="h-3.5 w-3.5 inline mr-1.5" />
           Agendamentos ({schedules.length})
+        </button>
+        <button onClick={() => setTab("cloud")}
+          className={`px-4 py-1.5 rounded-md text-sm transition-colors ${tab === "cloud" ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
+          <Cloud className="h-3.5 w-3.5 inline mr-1.5" />
+          Nuvem ({cloudProviders.length})
         </button>
       </div>
 
@@ -406,6 +567,81 @@ export default function BackupsPage() {
         </Card>
       )}
 
+      {/* New Cloud Provider Form */}
+      {showNewCloud && tab === "cloud" && (
+        <Card className="bg-[#111] border-white/10">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-white flex items-center gap-2">
+              <Cloud className="h-4 w-4" /> Adicionar Provedor de Nuvem
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Nome</label>
+                <Input value={cloudName} onChange={(e) => setCloudName(e.target.value)}
+                  placeholder="Meu Google Drive" className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Provedor</label>
+                <select value={cloudType} onChange={(e) => setCloudType(e.target.value)}
+                  className="w-full h-9 rounded-md bg-white/5 border border-white/10 text-white text-sm px-3">
+                  <option value="google_drive">Google Drive</option>
+                  <option value="dropbox">Dropbox</option>
+                  <option value="terabox">Terabox</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Token de Acesso</label>
+                <Input type="password" value={cloudToken} onChange={(e) => setCloudToken(e.target.value)}
+                  placeholder="Token OAuth2 ou API Key" className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Pasta Remota</label>
+                <Input value={cloudFolder} onChange={(e) => setCloudFolder(e.target.value)}
+                  placeholder="/CoreByte-Backups" className="bg-white/5 border-white/10 text-white h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Backup Automático</label>
+                <select value={cloudAutoBackup ? "true" : "false"} onChange={(e) => setCloudAutoBackup(e.target.value === "true")}
+                  className="w-full h-9 rounded-md bg-white/5 border border-white/10 text-white text-sm px-3">
+                  <option value="false">Desativado</option>
+                  <option value="true">Ativado</option>
+                </select>
+              </div>
+              {cloudAutoBackup && (
+                <div>
+                  <label className="text-xs text-white/50 mb-1 block">Frequência</label>
+                  <select value={cloudAutoFrequency} onChange={(e) => setCloudAutoFrequency(e.target.value)}
+                    className="w-full h-9 rounded-md bg-white/5 border border-white/10 text-white text-sm px-3">
+                    <option value="daily">Diário</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensal</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+              <p className="text-xs text-blue-300/70">
+                <strong>Como obter o token:</strong><br />
+                <strong>Google Drive:</strong> Acesse console.cloud.google.com, crie credenciais OAuth2 e gere um token de acesso.<br />
+                <strong>Dropbox:</strong> Acesse dropbox.com/developers/apps, crie um app e gere um Access Token.<br />
+                <strong>Terabox:</strong> Acesse terabox.com/developer e gere uma API key.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={createCloudProvider} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Cloud className="h-3.5 w-3.5 mr-1" /> Adicionar Provedor
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowNewCloud(false)}
+                className="text-white/50 hover:text-white">
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Backups Tab */}
       {tab === "backups" && (
         <>
@@ -459,6 +695,29 @@ export default function BackupsPage() {
                               onClick={() => window.open(`/api/backups/${backup.id}/download`, "_blank")}>
                               <Download className="h-3 w-3" />
                             </Button>
+                            {cloudProviders.filter(p => p.enabled).length > 0 && (
+                              <div className="relative group">
+                                <Button variant="ghost" size="sm"
+                                  className="h-7 text-xs text-blue-400/60 hover:text-blue-400"
+                                  disabled={uploadingBackupId === backup.id}>
+                                  {uploadingBackupId === backup.id ? (
+                                    <div className="h-3 w-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <CloudUpload className="h-3 w-3" />
+                                  )}
+                                </Button>
+                                <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl py-1 hidden group-hover:block z-50 min-w-[160px]">
+                                  {cloudProviders.filter(p => p.enabled).map(p => (
+                                    <button key={p.id}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-2"
+                                      onClick={() => uploadToCloud(backup.id, p.id)}>
+                                      <span>{cloudTypeIcon(p.type)}</span>
+                                      {p.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <Button variant="ghost" size="sm" className="h-7 text-xs text-green-400 hover:text-green-300"
                               onClick={() => restoreBackup(backup.id)}>
                               <RotateCcw className="h-3 w-3" />
@@ -540,6 +799,98 @@ export default function BackupsPage() {
                         </Button>
                         <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400/50 hover:text-red-400"
                           onClick={() => deleteSchedule(schedule.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Cloud Tab */}
+      {tab === "cloud" && (
+        <>
+          {cloudProviders.length === 0 ? (
+            <Card className="bg-[#111] border-white/10 border-dashed">
+              <CardContent className="py-12 text-center">
+                <Cloud className="h-10 w-10 text-white/10 mx-auto" />
+                <p className="text-sm text-white/40 mt-3">Nenhum provedor de nuvem configurado</p>
+                <p className="text-xs text-white/25 mt-1">Conecte Google Drive, Dropbox ou Terabox para enviar backups automaticamente</p>
+                <Button size="sm" className="mt-4 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                  onClick={() => setShowNewCloud(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Provedor
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {cloudProviders.map((provider) => (
+                <Card key={provider.id} className="bg-[#111] border-white/10">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`p-2.5 rounded-lg ${provider.enabled ? "bg-blue-500/10" : "bg-white/5"}`}>
+                          <span className="text-lg">{cloudTypeIcon(provider.type)}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-white truncate">{provider.name}</p>
+                            <Badge className={`border-0 text-[10px] ${provider.enabled ? "bg-green-500/10 text-green-400" : "bg-white/5 text-white/30"}`}>
+                              {provider.enabled ? "Conectado" : "Desativado"}
+                            </Badge>
+                            <Badge className="bg-white/5 text-white/40 border-0 text-[10px]">
+                              {cloudTypeLabel(provider.type)}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[10px] text-white/30 flex items-center gap-1">
+                              <FolderArchive className="h-2.5 w-2.5" /> {provider.folder || "/CoreByte-Backups"}
+                            </span>
+                            {provider.autoBackup && (
+                              <Badge className="bg-purple-500/10 text-purple-400 border-0 text-[9px]">
+                                Auto: {provider.autoFrequency === "daily" ? "Diário" : provider.autoFrequency === "weekly" ? "Semanal" : "Mensal"}
+                              </Badge>
+                            )}
+                            {provider.lastSync && (
+                              <span className="text-[10px] text-white/20 flex items-center gap-1">
+                                <CheckCircle2 className="h-2.5 w-2.5 text-green-400/50" /> Último sync: {formatDate(provider.lastSync)}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-white/20">
+                              Token: {provider.accessToken ? "••••••••" : "Não configurado"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {/* Auto backup toggle */}
+                        <div className="flex items-center gap-1 mr-2">
+                          <select
+                            value={provider.autoFrequency}
+                            onChange={(e) => updateCloudAutoBackup(provider.id, true, e.target.value)}
+                            className="h-7 text-[10px] bg-white/5 border border-white/10 rounded text-white/60 px-1">
+                            <option value="daily">Diário</option>
+                            <option value="weekly">Semanal</option>
+                            <option value="monthly">Mensal</option>
+                          </select>
+                          <Button variant="ghost" size="sm"
+                            className={`h-7 text-xs ${provider.autoBackup ? "text-purple-400 hover:text-purple-300" : "text-white/30 hover:text-white"}`}
+                            onClick={() => updateCloudAutoBackup(provider.id, !provider.autoBackup)}
+                            title={provider.autoBackup ? "Desativar backup automático" : "Ativar backup automático"}>
+                            {provider.autoBackup ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                        <Button variant="ghost" size="sm"
+                          className={`h-7 text-xs ${provider.enabled ? "text-yellow-400 hover:text-yellow-300" : "text-green-400 hover:text-green-300"}`}
+                          onClick={() => toggleCloudProvider(provider.id, provider.enabled)}>
+                          {provider.enabled ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400/50 hover:text-red-400"
+                          onClick={() => deleteCloudProvider(provider.id)}>
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
