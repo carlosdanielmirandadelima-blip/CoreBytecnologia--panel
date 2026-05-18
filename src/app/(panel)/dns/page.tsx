@@ -46,13 +46,18 @@ export default function DnsPage() {
   const fetchZones = useCallback(async () => {
     try {
       const res = await fetch("/api/dns/zones");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (data.notConfigured) {
+        setError(data.error || "Token Cloudflare não configurado.");
+        setZones([]);
+      } else if (data.error) {
+        setError(data.error);
+        setZones([]);
+      } else if (Array.isArray(data)) {
         setZones(data);
         setError("");
       } else {
-        const data = await res.json();
-        setError(data.error || "Erro ao carregar zonas");
+        setError("Resposta inesperada da API");
       }
     } catch {
       setError("Erro de conexão");

@@ -13,7 +13,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const token = await getCloudflareToken();
-  if (!token) return NextResponse.json({ error: "Token Cloudflare não configurado. Vá em Configurações > Integrações." }, { status: 400 });
+  if (!token) return NextResponse.json({ error: "Token Cloudflare não configurado. Vá em Configurações > Integrações.", notConfigured: true }, { status: 200 });
 
   try {
     const res = await fetch("https://api.cloudflare.com/client/v4/zones?per_page=50", {
