@@ -151,19 +151,27 @@ export default function Sidebar() {
             collapsed && "justify-center"
           )}
         >
-          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-white/10 min-w-[32px]">
-            <User className="h-4 w-4 text-white/70" />
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">
-                {session?.user?.name || "Usuário"}
-              </p>
-              <p className="text-[10px] text-white/50 truncate">
-                {session?.user?.email}
-              </p>
+          <Link
+            href="/settings"
+            className={cn(
+              "flex items-center gap-3 flex-1 min-w-0 rounded-lg px-1 py-1 hover:bg-white/5 transition-colors cursor-pointer",
+              collapsed && "justify-center px-0"
+            )}
+          >
+            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-white/10 min-w-[32px]">
+              <User className="h-4 w-4 text-white/70" />
             </div>
-          )}
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">
+                  {session?.user?.name || "Usuário"}
+                </p>
+                <p className="text-[10px] text-white/50 truncate">
+                  {session?.user?.email}
+                </p>
+              </div>
+            )}
+          </Link>
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
               <Button
