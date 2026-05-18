@@ -68,29 +68,40 @@ export default function MonitoringPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const fetchStats = useCallback(async () => {
+    // Fetch system stats independently from container stats
+    // so a slow/failing container stats call doesn't zero out system data
     try {
-      const [sysRes, containerRes] = await Promise.all([
-        fetch("/api/system/stats"),
-        fetch("/api/containers/stats"),
-      ]);
-      const sysData = await sysRes.json();
-      const containerData = await containerRes.json();
-
-      if (!sysData.error) {
-        setSystemStats(sysData);
-        setHistory((prev) => {
-          const point = {
-            time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-            cpu: sysData.cpu.percent,
-            memory: sysData.memory.percent,
-          };
-          const updated = [...prev, point];
-          return updated.slice(-30);
-        });
+      const sysRes = await fetch("/api/system/stats");
+      if (sysRes.ok) {
+        const sysData = await sysRes.json();
+        if (sysData && !sysData.error) {
+          setSystemStats(sysData);
+          setHistory((prev) => {
+            const point = {
+              time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+              cpu: sysData.cpu?.percent ?? 0,
+              memory: sysData.memory?.percent ?? 0,
+            };
+            const updated = [...prev, point];
+            return updated.slice(-30);
+          });
+        }
       }
-      if (Array.isArray(containerData)) setContainerStats(containerData);
     } catch {
-      // ignore
+      // system stats failed, keep previous values
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const containerRes = await fetch("/api/containers/stats", { signal: controller.signal });
+      clearTimeout(timeout);
+      if (containerRes.ok) {
+        const containerData = await containerRes.json();
+        if (Array.isArray(containerData)) setContainerStats(containerData);
+      }
+    } catch {
+      // container stats failed or timed out, keep previous values
     }
   }, []);
 
@@ -98,7 +109,7 @@ export default function MonitoringPage() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchStats, 3000);
+    const interval = setInterval(fetchStats, 5000);
     return () => clearInterval(interval);
   }, [autoRefresh, fetchStats]);
 
@@ -120,7 +131,7 @@ export default function MonitoringPage() {
             <Activity className="h-6 w-6 text-blue-400" /> Monitoramento
           </h1>
           <p className="text-sm text-white/50">
-            {systemStats?.hostname || "Servidor"} &middot; Atualização a cada 3s
+            {systemStats?.hostname || "Servidor"} &middot; Atualização a cada 5s
           </p>
         </div>
         <div className="flex gap-2">

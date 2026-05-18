@@ -28,10 +28,13 @@ export default function ImagesPage() {
 
   const fetchImages = useCallback(async () => {
     try {
-      const res = await fetch("/api/images");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch("/api/images", { signal: controller.signal });
+      clearTimeout(timeout);
       if (res.ok) setImages(await res.json());
-    } catch (err) {
-      console.error("Error:", err);
+    } catch {
+      // timeout or network error
     } finally {
       setLoading(false);
     }

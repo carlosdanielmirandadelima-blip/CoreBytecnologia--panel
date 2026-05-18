@@ -19,6 +19,8 @@ import {
   Cpu,
   MemoryStick,
   RefreshCw,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import ContainerLogs from "@/components/containers/container-logs";
@@ -70,6 +72,7 @@ export default function ContainerDetailPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showEnvValues, setShowEnvValues] = useState(false);
 
   const fetchContainer = useCallback(async () => {
     try {
@@ -414,15 +417,36 @@ export default function ContainerDetailPage() {
 
               {container.env.length > 0 && (
                 <div>
-                  <p className="text-xs text-white/40 mb-2">
-                    Variáveis de Ambiente
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-white/40">
+                      Variáveis de Ambiente
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-white/40 hover:text-white"
+                      onClick={() => setShowEnvValues(!showEnvValues)}
+                    >
+                      {showEnvValues ? (
+                        <><EyeOff className="h-3 w-3 mr-1" /> Ocultar</>
+                      ) : (
+                        <><Eye className="h-3 w-3 mr-1" /> Revelar</>
+                      )}
+                    </Button>
+                  </div>
                   <div className="bg-black/50 rounded-lg p-3 max-h-48 overflow-y-auto">
-                    {container.env.map((env, i) => (
-                      <p key={i} className="text-xs text-white/60 font-mono">
-                        {env}
-                      </p>
-                    ))}
+                    {container.env.map((envVar, i) => {
+                      const eqIdx = envVar.indexOf("=");
+                      const key = eqIdx > -1 ? envVar.substring(0, eqIdx) : envVar;
+                      const value = eqIdx > -1 ? envVar.substring(eqIdx + 1) : "";
+                      const isSensitive = /password|secret|token|key|api_key|apikey|credential|auth/i.test(key);
+                      const masked = isSensitive && !showEnvValues;
+                      return (
+                        <p key={i} className="text-xs text-white/60 font-mono">
+                          {key}={masked ? "••••••••" : value}
+                        </p>
+                      );
+                    })}
                   </div>
                 </div>
               )}
