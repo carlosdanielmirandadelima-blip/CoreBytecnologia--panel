@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     if (body.data.variables?.length) {
       for (const v of body.data.variables) {
-        await prisma.variable.upsert({
+        await prisma.globalEnvVar.upsert({
           where: { id: v.id },
           create: { id: v.id, key: v.key, value: v.value, description: v.description || "" },
           update: { key: v.key, value: v.value },

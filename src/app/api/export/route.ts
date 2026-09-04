@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const [projects, variables, teams, statusPages, clusters, scalingRules, pipelines, dynamicDns, buildJobs, appTemplates] = await Promise.all([
       prisma.project.findMany(),
-      prisma.variable.findMany(),
+      prisma.globalEnvVar.findMany(),
       prisma.team.findMany(),
       prisma.statusPage.findMany(),
       prisma.cluster.findMany(),
