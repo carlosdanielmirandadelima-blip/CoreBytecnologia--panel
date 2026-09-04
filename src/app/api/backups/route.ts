@@ -2,13 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const BACKUP_DIR = path.join(process.cwd(), "backups");
+
+// Nome de volume/container Docker: começa alfanumérico, segue com [\w.-]
+const DOCKER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+// Caminho absoluto sem metacaracteres de shell nem retrocesso
+const SAFE_PATH_RE = /^\/[A-Za-z0-9_\/.-]*$/;
+
+function validarEntrada(name: string, type: string, source: string): string | null {
+  if (!/^[A-Za-z0-9 _.-]+$/.test(name) || name.includes("..")) {
+    return "Nome inválido";
+  }
+  if (type === "path") {
+    if (!SAFE_PATH_RE.test(source) || source.includes("..")) return "Caminho inválido";
+  } else if (!DOCKER_NAME_RE.test(source)) {
+    return "Source inválido";
+  }
+  return null;
+}
 
 if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -38,9 +55,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nome e source são obrigatórios" }, { status: 400 });
     }
 
+    const erro = validarEntrada(String(name), String(type || "volume"), String(source));
+    if (erro) {
+      return NextResponse.json({ error: erro }, { status: 400 });
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const fileName = `${name.replace(/\s+/g, "-").toLowerCase()}_${timestamp}.tar.gz`;
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const filePath = path.resolve(BACKUP_DIR, fileName);
+    if (!filePath.startsWith(BACKUP_DIR + path.sep)) {
+      return NextResponse.json({ error: "Nome inválido" }, { status: 400 });
+    }
 
     const backup = await prisma.backup.create({
       data: {
@@ -56,13 +81,17 @@ export async function POST(req: NextRequest) {
     (async () => {
       try {
         if (type === "volume") {
-          await execAsync(
-            `docker run --rm -v ${source}:/data -v ${BACKUP_DIR}:/backup alpine tar czf /backup/${fileName} -C /data .`
-          );
+          await execFileAsync("docker", [
+            "run", "--rm",
+            "-v", `${source}:/data`,
+            "-v", `${BACKUP_DIR}:/backup`,
+            "alpine", "tar", "czf", `/backup/${fileName}`, "-C", "/data", ".",
+          ]);
         } else if (type === "container") {
-          await execAsync(`docker export ${source} | gzip > ${filePath}`);
+          // pipe exige shell; entradas já validadas e passadas como argumentos posicionais
+          await execFileAsync("bash", ["-c", 'docker export "$0" | gzip > "$1"', source, filePath]);
         } else {
-          await execAsync(`tar czf ${filePath} ${source}`);
+          await execFileAsync("tar", ["czf", filePath, source]);
         }
 
         const stats = fs.statSync(filePath);
