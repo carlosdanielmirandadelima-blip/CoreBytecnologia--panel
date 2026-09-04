@@ -58,11 +58,14 @@ export async function deployProject(projectId: string) {
 
     const env = Object.entries(envMap).map(([k, v]) => `${k}=${v}`);
 
-    try {
-      await docker.pull(service.image);
-    } catch {
-      // image might already exist locally
-    }
+    // docker.pull resolve com o STREAM, não com o fim do download;
+    // é preciso aguardar via followProgress. Erro de pull propaga.
+    const pullStream = await docker.pull(service.image);
+    await new Promise<void>((resolve, reject) => {
+      docker.modem.followProgress(pullStream, (err: Error | null) =>
+        err ? reject(err) : resolve()
+      );
+    });
 
     const createOptions: Docker.ContainerCreateOptions = {
       Image: service.image,
