@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
+import { verify as verifyOtp } from "otplib";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -10,6 +11,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        totp: { label: "Código 2FA", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
@@ -22,6 +24,19 @@ export const authOptions: NextAuthOptions = {
           user.password
         );
         if (!isValid) return null;
+        if (user.twoFactorEnabled) {
+          if (!credentials.totp || !user.twoFactorSecret) return null;
+          try {
+            const result = await verifyOtp({
+              strategy: "totp",
+              secret: user.twoFactorSecret,
+              token: credentials.totp,
+            });
+            if (!result.valid) return null;
+          } catch {
+            return null;
+          }
+        }
         return {
           id: user.id,
           name: user.name,
