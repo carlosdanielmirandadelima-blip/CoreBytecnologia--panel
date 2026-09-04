@@ -2,10 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Precedente caso-004-td01 (command-injection): validar com regex estrita e
+// trocar exec(string) por execFile(bin, [args]); shell só com args posicionais.
+// Hostname (RFC 1123) ou IPv4 — sem espaços nem metacaracteres de shell.
+const HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$/;
+
+function hostValido(host: string): boolean {
+  return host.length <= 253 && HOST_RE.test(host);
+}
+
+function portaValida(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
 
 async function checkHttp(url: string, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
   const start = Date.now();
@@ -25,21 +38,37 @@ async function checkHttp(url: string, timeout: number): Promise<{ status: string
   }
 }
 
-async function checkTcp(host: string, port: number, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
+
+    export async function checkTcp(host: string, port: number, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
   const start = Date.now();
+  if (!hostValido(host) || !portaValida(port)) {
+    return { status: "down", responseTime: 0, message: "Alvo inválido" };
+  }
   try {
-    await execAsync(`timeout ${timeout} bash -c 'echo > /dev/tcp/${host}/${port}'`, { timeout: timeout * 1000 });
+    // host/port validados e passados como argumentos posicionais ($0/$1), nunca interpolados
+    await execFileAsync(
+      "timeout",
+      [String(timeout), "bash", "-c", 'echo > "/dev/tcp/$0/$1"', host, String(port)],
+      { timeout: timeout * 1000 }
+    );
     return { status: "up", responseTime: Date.now() - start, message: `TCP ${host}:${port} open` };
   } catch {
     return { status: "down", responseTime: Date.now() - start, message: `TCP ${host}:${port} closed` };
   }
 }
 
-async function checkPing(host: string, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
+export async function checkPing(host: string, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
   const start = Date.now();
+  if (!hostValido(host)) {
+    return { status: "down", responseTime: 0, message: "Alvo inválido" };
+  }
   try {
-    const { stdout } = await execAsync(`ping -c 1 -W ${timeout} ${host}`, { timeout: timeout * 1000 });
-    const match = stdout.match(/time=(\d+\.?\d*)/);
+    const { stdout } = await execFileAsync(
+      "ping",
+      ["-c", "1", "-W", String(timeout), host],
+      { timeout: timeout * 1000 }
+    );
+    const match = String(stdout).match(/time=(\d+\.?\d*)/);
     const responseTime = match ? parseFloat(match[1]) : Date.now() - start;
     return { status: "up", responseTime: Math.round(responseTime), message: `Ping ${responseTime}ms` };
   } catch {
