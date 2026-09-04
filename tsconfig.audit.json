@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "corebyte-ceo-apk", "tests", "vitest.config.ts"]
+}
