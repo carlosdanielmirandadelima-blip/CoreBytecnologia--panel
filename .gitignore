@@ -51,13 +51,29 @@ next-env.d.ts
 # ---------------------------------------------------------------------------
 *.db
 *.db-journal
+*.db-wal
 *.sqlite
 *.sqlite3
 **/prisma/dev.db
 prisma/prisma/
+**/data/
 /data/
 /backups/
 *.tar.gz
+*.tgz
+
+# Credenciais e chaves — nunca devem entrar no repositório
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*.ovpn
+credentials.json
+service-account*.json
 
 # artefatos de teste locais
 /cb-compiled/
