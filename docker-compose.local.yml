@@ -1,0 +1,7 @@
+# Override para rodar o painel na sua máquina e acessar direto pelo IP,
+# sem depender de domínio/HTTPS. O Traefik continua ativo (portas 80/443)
+# para você testar o deploy com domínio.
+services:
+  panel:
+    ports:
+      - "8091:3000"

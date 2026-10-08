@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { prisma } from "./prisma";
 import { runHelper, ensurePanelNetwork, PANEL_NETWORK } from "./docker";
 import { assertBackupSource, assertName } from "./validate";
+import { resolveBackupMount } from "./backup-paths";
 
 /**
  * Backups e restaurações.
@@ -62,10 +63,14 @@ export async function backupVolume(volumeName: string, fileName: string): Promis
   const safeVolume = assertName(volumeName, "volume");
   await ensureBackupDir();
   const filePath = assertInsideBackupDir(path.join(BACKUP_DIR, path.basename(fileName)));
+  // O container auxiliar é criado pelo daemon, que interpreta caminhos como
+  // sendo do HOST. Montamos a origem real na MESMA posição que este processo
+  // usa, então o caminho do arquivo é idêntico dos dois lados.
+  const mount = await resolveBackupMount(BACKUP_DIR);
 
   await runHelper(
-    ["tar", "czf", `/backup/${path.basename(fileName)}`, "-C", "/data", "."],
-    [`${safeVolume}:/data:ro`, `${BACKUP_DIR}:/backup`]
+    ["tar", "czf", filePath, "-C", "/data", "."],
+    [`${safeVolume}:/data:ro`, `${mount.source}:${mount.destination}`]
   );
 
   const st = await fsp.stat(filePath);
@@ -81,10 +86,11 @@ export async function backupPath(sourcePath: string, fileName: string): Promise<
   const safePath = assertBackupSource(sourcePath, "file");
   await ensureBackupDir();
   const filePath = assertInsideBackupDir(path.join(BACKUP_DIR, path.basename(fileName)));
+  const mount = await resolveBackupMount(BACKUP_DIR);
 
   await runHelper(
-    ["tar", "czf", `/backup/${path.basename(fileName)}`, "-C", "/data", "."],
-    [`${safePath}:/data:ro`, `${BACKUP_DIR}:/backup`]
+    ["tar", "czf", filePath, "-C", "/data", "."],
+    [`${safePath}:/data:ro`, `${mount.source}:${mount.destination}`]
   );
 
   const st = await fsp.stat(filePath);
@@ -203,10 +209,15 @@ export async function restoreVolumeBackup(
   const filePath = assertInsideBackupDir(backup.filePath);
   if (!fs.existsSync(filePath)) throw new Error("O arquivo de backup não está mais no disco");
   const volume = assertName(backup.source, "volume");
-  const fileName = path.basename(filePath);
+
+  const mount = await resolveBackupMount(BACKUP_DIR);
+  const backupBind = `${mount.source}:${mount.destination}:ro`;
+  // Caminho do arquivo visto pelo container auxiliar: a origem é montada na
+  // mesma posição que este processo usa, então o caminho é o mesmo.
+  const insidePath = filePath;
 
   // 1) Valida o arquivo antes de tocar no volume.
-  await runHelper(["tar", "tzf", `/backup/${fileName}`], [`${BACKUP_DIR}:/backup:ro`], {
+  await runHelper(["tar", "tzf", insidePath], [backupBind], {
     timeoutMs: 10 * 60 * 1000,
   }).catch(() => {
     throw new Error("O arquivo de backup está corrompido ou não é um tar.gz válido");
@@ -214,10 +225,10 @@ export async function restoreVolumeBackup(
 
   // 2) Restaura. A limpeza do destino é opcional e explícita.
   const script = opts.wipeExisting
-    ? "rm -rf /data/* /data/.[!.]* 2>/dev/null; tar xzf /backup/" + fileName + " -C /data"
-    : "tar xzf /backup/" + fileName + " -C /data";
+    ? `rm -rf /data/* /data/.[!.]* 2>/dev/null; tar xzf ${insidePath} -C /data`
+    : `tar xzf ${insidePath} -C /data`;
 
-  await runHelper(["sh", "-c", script], [`${volume}:/data`, `${BACKUP_DIR}:/backup:ro`], {
+  await runHelper(["sh", "-c", script], [`${volume}:/data`, backupBind], {
     timeoutMs: 60 * 60 * 1000,
   });
 }

@@ -45,6 +45,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Scripts de administração (create-admin.js etc.) — o instalador os usa.
+COPY --from=builder /app/scripts ./scripts
+
 # Prisma: schema + migrations + CLI + engines (necessários para migrate deploy)
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
@@ -63,7 +66,7 @@ COPY --from=builder /app/node_modules/basic-ftp ./node_modules/basic-ftp
 # O chmod garante leitura do schema/CLI mesmo se os arquivos vierem com
 # permissão restritiva do host (era o que impedia o migrate de rodar no boot).
 RUN mkdir -p /app/data/backups \
- && chmod -R a+rX /app/prisma /app/node_modules/prisma /app/node_modules/@prisma /app/node_modules/.prisma \
+ && chmod -R a+rX /app/prisma /app/scripts /app/node_modules/prisma /app/node_modules/@prisma /app/node_modules/.prisma \
  && chown -R nextjs:nodejs /app/data
 
 USER nextjs
