@@ -5,11 +5,14 @@ import { prisma } from "@/lib/prisma";
 import Docker from "dockerode";
 import os from "os";
 import fs from "fs";
+import { writeAudit } from "@/lib/audit";
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "nodes.post", resource: "nodes", details: `Operação post em nodes` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -58,11 +61,14 @@ export async function POST(
         const diskData = fs.readFileSync("/proc/mounts", "utf8");
         const rootMount = diskData.split("\n").find((l) => l.includes(" / "));
         if (rootMount) {
-          const { exec } = require("child_process");
-          const { promisify } = require("util");
-          const execAsync = promisify(exec);
-          const { stdout } = await execAsync("df / --output=pcent | tail -1");
-          diskPercent = parseFloat(stdout.trim().replace("%", "")) || 0;
+          // execFile com argumentos separados (sem shell, sem injeção).
+          const { execFile } = await import("child_process");
+          const { promisify } = await import("util");
+          const run = promisify(execFile);
+          const { stdout } = await run("df", ["-P", "/"]);
+          const line = stdout.trim().split("\n").pop() || "";
+          const parts = line.split(/\s+/);
+          diskPercent = Number(String(parts[4] ?? "0").replace("%", "")) || 0;
         }
       } catch {
         // fallback

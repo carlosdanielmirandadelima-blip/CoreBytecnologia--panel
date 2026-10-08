@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Docker from "dockerode";
+import { writeAudit } from "@/lib/audit";
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
@@ -15,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "builds.post", resource: "builds", details: `Operação post em builds` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

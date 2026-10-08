@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { writeAudit } from "@/lib/audit";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -18,6 +19,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "users.put", resource: "users", details: `Operação put em users` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 

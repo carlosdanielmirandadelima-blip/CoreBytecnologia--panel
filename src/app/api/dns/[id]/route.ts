@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { writeAudit } from "@/lib/audit";
 
 async function getCloudflareToken(): Promise<string | null> {
   const setting = await prisma.setting.findUnique({ where: { key: "cloudflare_api_token" } });
@@ -12,6 +13,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "dns.put", resource: "dns", details: `Operação put em dns` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -43,6 +46,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "dns.delete", resource: "dns", details: `Operação delete em dns` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

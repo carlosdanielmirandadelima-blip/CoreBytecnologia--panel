@@ -1,33 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { authenticator } from "otplib";
+import { verifyTwoFactorCode } from "@/lib/two-factor";
+import { writeAudit } from "@/lib/audit";
+import { DISABLED_TWO_FACTOR_FIELDS } from "@/lib/two-factor-fields";
 
+/**
+ * Desativa o 2FA.
+ *
+ * Antes não pedia nenhuma prova de identidade: com a sessão aberta, qualquer
+ * um podia desligar o segundo fator. Agora exige um código válido do app.
+ */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { user, error } = await requireSession();
+  if (error) return error;
 
-  const userId = (session.user as { id: string }).id;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  const body = (await req.json().catch(() => ({}))) as { code?: string };
+  const code = String(body.code || "").replace(/\D/g, "");
 
-  try {
-    const body = await req.json();
-    const { code } = body;
+  const record = await prisma.user.findUnique({ where: { id: user!.id } });
+  if (!record) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
 
-    if (user.twoFactorEnabled && user.twoFactorSecret) {
-      const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret });
-      if (!isValid) return NextResponse.json({ error: "Código inválido" }, { status: 400 });
-    }
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { twoFactorEnabled: false, twoFactorSecret: "" },
-    });
-
-    return NextResponse.json({ success: true, message: "2FA desativado" });
-  } catch {
-    return NextResponse.json({ error: "Erro ao desativar 2FA" }, { status: 500 });
+  if (!record.twoFactorEnabled) {
+    return NextResponse.json({ error: "O 2FA já está desativado" }, { status: 400 });
   }
+
+  if (!code) {
+    return NextResponse.json(
+      { error: "Informe um código atual do aplicativo para desativar o 2FA" },
+      { status: 400 }
+    );
+  }
+
+  const valid = await verifyTwoFactorCode(record.twoFactorSecret, code);
+  if (!valid) {
+    return NextResponse.json({ error: "Código incorreto" }, { status: 400 });
+  }
+
+  await prisma.user.update({ where: { id: record.id }, data: DISABLED_TWO_FACTOR_FIELDS });
+
+  await writeAudit(req, {
+    action: "two-factor.disable",
+    resource: "user",
+    resourceId: record.id,
+    details: "2FA desativado",
+    user,
+  });
+
+  return NextResponse.json({ ok: true, twoFactorEnabled: false });
 }

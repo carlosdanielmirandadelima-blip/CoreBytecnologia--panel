@@ -1,56 +1,99 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { hashApiKey } from "@/lib/api-auth";
+import { requireSession } from "@/lib/session";
+import { assertString } from "@/lib/validate";
+import { writeAudit } from "@/lib/audit";
+
+/**
+ * Gerenciamento de chaves de API.
+ *
+ * A chave completa só é mostrada uma única vez (na criação); no banco fica
+ * apenas o hash, para que um vazamento do banco não exponha as chaves.
+ */
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { user, error } = await requireSession();
+  if (error) return error;
 
-  const userId = (session.user as { id: string }).id;
   const keys = await prisma.apiKey.findMany({
-    where: { userId },
+    where: { userId: user!.id },
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, prefix: true, permissions: true, lastUsed: true, expiresAt: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      permissions: true,
+      lastUsed: true,
+      expiresAt: true,
+      createdAt: true,
+    },
   });
 
   return NextResponse.json(keys);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { user, error } = await requireSession();
+  if (error) return error;
 
   try {
-    const body = await req.json();
-    const { name, permissions, expiresInDays } = body;
+    const body = (await req.json()) as {
+      name?: string;
+      permissions?: string;
+      expiresInDays?: number;
+    };
+    const name = assertString(body.name, "nome", 120, true);
 
-    if (!name) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
+    const permissions = ["read", "write", "admin"].includes(String(body.permissions))
+      ? String(body.permissions)
+      : "read";
 
-    const userId = (session.user as { id: string }).id;
-    const rawKey = `cb_${crypto.randomBytes(32).toString("hex")}`;
-    const prefix = rawKey.substring(0, 10) + "...";
+    const raw = `cb_${crypto.randomBytes(32).toString("hex")}`;
+    const prefix = raw.substring(0, 11) + "…";
 
     let expiresAt: Date | null = null;
-    if (expiresInDays) {
+    const days = Number(body.expiresInDays);
+    if (Number.isInteger(days) && days > 0 && days <= 3650) {
       expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+      expiresAt.setDate(expiresAt.getDate() + days);
     }
 
-    const apiKey = await prisma.apiKey.create({
+    const record = await prisma.apiKey.create({
       data: {
         name,
-        key: rawKey,
+        key: hashApiKey(raw),
         prefix,
-        permissions: permissions || "read",
+        permissions,
         expiresAt,
-        userId,
+        userId: user!.id,
       },
     });
 
-    return NextResponse.json({ ...apiKey, fullKey: rawKey }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Erro ao criar API key" }, { status: 500 });
+    await writeAudit(req, {
+      action: "api-key.create",
+      resource: "api-key",
+      resourceId: record.id,
+      details: `Chave de API "${name}" criada (permissão: ${permissions})`,
+      user,
+    });
+
+    // A chave completa aparece só aqui, uma vez.
+    return NextResponse.json(
+      {
+        id: record.id,
+        name: record.name,
+        prefix: record.prefix,
+        permissions: record.permissions,
+        expiresAt: record.expiresAt,
+        key: raw,
+        warning: "Guarde esta chave agora: ela não será mostrada novamente.",
+      },
+      { status: 201 }
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro ao criar a chave";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }

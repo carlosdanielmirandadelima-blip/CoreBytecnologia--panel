@@ -1,11 +1,69 @@
-import { withAuth } from "next-auth/middleware";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-export default withAuth({
-  pages: {
-    signIn: "/login",
-  },
-});
+/**
+ * Proteção de rotas.
+ *
+ * Antes o matcher cobria apenas as páginas: nenhuma rota de /api era
+ * protegida, e 10 endpoints ficavam abertos à internet (gravar credenciais
+ * de nuvem, executar backups, registrar admin…).
+ *
+ * Agora:
+ *  - páginas exigem sessão (redireciona para /login);
+ *  - /api responde 401 em JSON (sem redirecionar HTML, para o frontend e
+ *    scripts conseguirem tratar o erro);
+ *  - ficam públicas apenas: /login, /register, a página de status,
+ *    o fluxo de auth, o endpoint de configuração inicial e a API interna
+ *    do worker / API v1 (que têm autenticação própria).
+ *
+ * O segredo de assinatura é lido da variável de ambiente NEXTAUTH_SECRET
+ * automaticamente pelo NextAuth.
+ */
+
+const PUBLIC_API_PREFIXES = [
+  "/api/auth", // login do NextAuth e configuração inicial
+  "/api/status", // status page pública
+  "/api/worker", // token interno (x-corebyte-worker)
+  "/api/v1", // chave de API
+];
+
+const PUBLIC_PAGES = ["/login", "/register"];
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return true;
+  }
+  if (PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(p + "/"))) return true;
+  // Página pública de disponibilidade
+  if (pathname === "/status" || pathname.startsWith("/status/")) return true;
+  return false;
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (isPublicPath(pathname)) return NextResponse.next();
+
+  const session = await getToken({ req });
+
+  if (session) return NextResponse.next();
+
+  // Chamadas de API recebem JSON; navegação recebe redirecionamento.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
+  const loginUrl = new URL("/login", req.url);
+  loginUrl.searchParams.set("callbackUrl", pathname);
+  return NextResponse.redirect(loginUrl);
+}
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/projects/:path*", "/compose/:path*", "/containers/:path*", "/images/:path*", "/monitoring/:path*", "/volumes/:path*", "/backups/:path*", "/servers/:path*", "/dns/:path*", "/status-pages/:path*", "/clusters/:path*", "/scaling/:path*", "/pipelines/:path*", "/dynamic-dns/:path*", "/builds/:path*", "/migrations/:path*", "/templates/:path*", "/audit-log/:path*", "/api-keys/:path*", "/plugins/:path*", "/teams/:path*", "/settings/:path*"],
+  matcher: [
+    /*
+     * Roda em tudo, exceto arquivos estáticos e imagens do Next.
+     * As exceções de autenticação são tratadas em isPublicPath().
+     */
+    "/((?!_next/static|_next/image|favicon\\.ico|assets/|manifest\\.json).*)",
+  ],
 };

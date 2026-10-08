@@ -1,20 +1,27 @@
-version: "3.8"
+name: corebyte
 
 services:
+  # ---------------------------------------------------------------- Traefik
+  # Proxy reverso com HTTPS automático (Let's Encrypt). É ele que publica
+  # os projetos implantados pelo painel, usando as labels criadas no deploy.
   traefik:
     image: traefik:v3.0
     container_name: corebyte-traefik
     restart: always
+    env_file:
+      - .env
     command:
       - "--api.dashboard=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=corebyte"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      # O e-mail do Let's Encrypt vem do .env (ACME_EMAIL) via env_file.
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
     ports:
@@ -26,23 +33,65 @@ services:
     networks:
       - corebyte
 
+  # ---------------------------------------------------------------- Painel
   panel:
-    build: .
+    build:
+      context: .
+      # O GID do grupo "docker" do host. Descubra com: getent group docker
+      args:
+        DOCKER_GID: ${DOCKER_GID:-999}
     container_name: corebyte-panel
     restart: always
+    # Todos os segredos (NEXTAUTH_SECRET, APP_SECRET, COREBYTE_SETUP_TOKEN…)
+    # ficam no arquivo .env, que não é versionado. Assim nada de sensível
+    # aparece no docker-compose.yml.
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=file:/app/data/corebyte.db
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - BACKUP_DIR=/app/data/backups
+      - PANEL_URL=http://panel:3000
+      - HOSTNAME=0.0.0.0
     volumes:
+      # Necessário para gerenciar containers, imagens e volumes do servidor.
       - /var/run/docker.sock:/var/run/docker.sock
+      # Banco + backups no MESMO volume persistente (antes os backups iam
+      # para /app/backups e eram apagados em cada atualização).
       - panel-data:/app/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.panel.rule=Host(`${PANEL_DOMAIN:-localhost}`)"
+      - "traefik.docker.network=corebyte"
+      - "traefik.http.routers.panel.rule=Host(`${PANEL_DOMAIN}`)"
       - "traefik.http.routers.panel.entrypoints=websecure"
+      - "traefik.http.routers.panel.tls=true"
       - "traefik.http.routers.panel.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.panel.service=panel"
       - "traefik.http.services.panel.loadbalancer.server.port=3000"
+    networks:
+      - corebyte
+
+  # ---------------------------------------------------------------- Worker
+  # Agendador: backups automáticos, monitoramento, dynamic DNS, scaling e
+  # métricas do servidor. Antes não existia — nada disparava sozinho.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        DOCKER_GID: ${DOCKER_GID:-999}
+    container_name: corebyte-worker
+    restart: always
+    depends_on:
+      - panel
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=file:/app/data/corebyte.db
+      - BACKUP_DIR=/app/data/backups
+      - PANEL_URL=http://panel:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - panel-data:/app/data
     networks:
       - corebyte
 
@@ -52,4 +101,6 @@ volumes:
 
 networks:
   corebyte:
+    # Nome fixo: o deploy usa esta rede para conectar os projetos ao Traefik.
+    name: corebyte
     driver: bridge

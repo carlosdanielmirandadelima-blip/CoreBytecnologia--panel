@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateApiKey } from "@/lib/api-auth";
+import { requireApiKey } from "@/lib/api-auth";
 import os from "os";
 
 export async function GET(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  // Exige permissão de leitura de verdade (antes o campo era ignorado).
+  const { error } = await requireApiKey(req, "read");
+  if (error) return error;
 
   const cpus = os.cpus();
   const totalMem = os.totalmem();

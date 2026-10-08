@@ -52,6 +52,7 @@ interface Project {
   branch: string;
   domain: string;
   composeFile: string;
+  environment: string;
   createdAt: string;
   updatedAt: string;
   services: Service[];

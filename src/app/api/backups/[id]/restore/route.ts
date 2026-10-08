@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
+import { writeAudit } from "@/lib/audit";
 
 const execAsync = promisify(exec);
 
@@ -12,6 +13,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "backups.post", resource: "backups", details: `Operação post em backups` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

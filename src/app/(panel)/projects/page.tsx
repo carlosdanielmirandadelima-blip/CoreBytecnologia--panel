@@ -39,6 +39,7 @@ interface Project {
   status: string;
   templateId: string;
   domain: string;
+  environment: string;
   createdAt: string;
   services: Service[];
 }

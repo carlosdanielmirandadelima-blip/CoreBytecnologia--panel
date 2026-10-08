@@ -1,131 +1,234 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+#
+# CoreByte Panel — instalador
+#
+# Uso:
+#   curl -fsSL https://raw.githubusercontent.com/carlosdanielmirandadelima-blip/CoreBytecnologia--panel/main/install.sh | bash
+#
+# ou, depois de clonar:
+#   sudo bash install.sh
+#
+set -euo pipefail
 
-# CoreByte Panel - Script de Instalação
-# Uso: curl -fsSL https://raw.githubusercontent.com/SEU_USUARIO/corebyte-panel/main/install.sh | bash
+REPO_URL="${COREBYTE_REPO:-https://github.com/carlosdanielmirandadelima-blip/CoreBytecnologia--panel.git}"
+INSTALL_DIR="${COREBYTE_DIR:-/opt/corebyte-panel}"
+BRANCH="${COREBYTE_BRANCH:-main}"
 
-REPO_URL="https://github.com/SEU_USUARIO/corebyte-panel.git"
-INSTALL_DIR="/opt/corebyte-panel"
-COMPOSE_FILE="docker-compose.yml"
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+info()  { echo -e "${BLUE}==>${NC} $*"; }
+ok()    { echo -e "${GREEN}  ✓${NC} $*"; }
+warn()  { echo -e "${YELLOW}  !${NC} $*"; }
+fail()  { echo -e "${RED}  ✗${NC} $*" >&2; exit 1; }
 
-echo -e "${BLUE}"
-echo "   ____               ____        _       "
-echo "  / ___|___  _ __ ___| __ ) _   _| |_ ___ "
-echo " | |   / _ \| '__/ _ \  _ \| | | | __/ _ \\"
-echo " | |__| (_) | | |  __/ |_) | |_| | ||  __/"
-echo "  \____\___/|_|  \___|____/ \__, |\__\___|"
-echo "                            |___/          "
-echo -e "  ${YELLOW}Tecnologia${NC}"
-echo ""
-echo -e "${GREEN}Instalador do CoreByte Panel${NC}"
-echo "========================================"
-echo ""
+cat <<'BANNER'
+   ____               ____        _
+  / ___|___  _ __ ___| __ ) _   _| |_ ___
+ | |   / _ \| '__/ _ \  _ \| | | | __/ _ \
+ | |__| (_) | | |  __/ |_) | |_| | ||  __/
+  \____\___/|_|  \___|____/ \__, |\__\___|
+                            |___/
+  CoreByte Tecnologia
+BANNER
+echo
 
-# Verificar se está rodando como root
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}Por favor, execute como root (sudo)${NC}"
-  exit 1
+# ---------------------------------------------------------------- requisitos
+[ "${EUID:-$(id -u)}" -eq 0 ] || fail "Execute como root (sudo bash install.sh)."
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  warn "systemd não encontrado: o instalador foi testado em Debian/Ubuntu/RHEL."
 fi
 
-# Verificar Docker
-echo -e "${BLUE}[1/5]${NC} Verificando Docker..."
-if ! command -v docker &> /dev/null; then
-  echo -e "${YELLOW}Docker não encontrado. Instalando...${NC}"
+# Portas 80/443 precisam estar livres (o Traefik as usa para o HTTPS).
+check_port() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1 && ss -ltn "( sport = :$port )" 2>/dev/null | grep -q LISTEN; then
+    fail "A porta $port já está em uso. Libere-a antes de continuar (o Traefik precisa dela para o HTTPS)."
+  fi
+}
+info "[1/6] Verificando portas 80 e 443"
+check_port 80
+check_port 443
+ok "portas livres"
+
+# ---------------------------------------------------------------- docker
+info "[2/6] Verificando Docker"
+if ! command -v docker >/dev/null 2>&1; then
+  warn "Docker não encontrado. Instalando pelo script oficial..."
   curl -fsSL https://get.docker.com | sh
-  systemctl enable docker
-  systemctl start docker
-  echo -e "${GREEN}Docker instalado com sucesso!${NC}"
+  systemctl enable --now docker
+  ok "Docker instalado"
 else
-  echo -e "${GREEN}Docker já instalado: $(docker --version)${NC}"
+  ok "Docker já instalado ($(docker --version | cut -d, -f1))"
 fi
 
-# Verificar Docker Compose
-echo -e "${BLUE}[2/5]${NC} Verificando Docker Compose..."
-if ! docker compose version &> /dev/null; then
-  echo -e "${YELLOW}Docker Compose não encontrado. Instalando plugin...${NC}"
-  apt-get update -qq && apt-get install -y -qq docker-compose-plugin
-  echo -e "${GREEN}Docker Compose instalado!${NC}"
-else
-  echo -e "${GREEN}Docker Compose já instalado: $(docker compose version)${NC}"
-fi
-
-# Verificar Git
-if ! command -v git &> /dev/null; then
-  echo -e "${YELLOW}Git não encontrado. Instalando...${NC}"
-  apt-get update -qq && apt-get install -y -qq git
-fi
-
-# Clonar ou atualizar repositório
-echo -e "${BLUE}[3/5]${NC} Baixando CoreByte Panel..."
-if [ -d "$INSTALL_DIR" ]; then
-  echo -e "${YELLOW}Diretório já existe. Atualizando...${NC}"
-  cd "$INSTALL_DIR"
-  git pull origin main
-else
-  git clone "$REPO_URL" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-fi
-
-# Configurar variáveis de ambiente
-echo -e "${BLUE}[4/5]${NC} Configurando ambiente..."
-if [ ! -f "$INSTALL_DIR/.env" ]; then
-  GENERATED_SECRET=$(openssl rand -base64 32)
-
-  echo ""
-  read -p "Domínio do painel (ex: painel.seudominio.com) [localhost]: " PANEL_DOMAIN
-  PANEL_DOMAIN=${PANEL_DOMAIN:-localhost}
-
-  read -p "Email para SSL (Let's Encrypt) [admin@example.com]: " ACME_EMAIL
-  ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
-
-  cat > "$INSTALL_DIR/.env" <<EOF
-# CoreByte Panel - Configurações
-PANEL_DOMAIN=${PANEL_DOMAIN}
-ACME_EMAIL=${ACME_EMAIL}
-NEXTAUTH_SECRET=${GENERATED_SECRET}
-NEXTAUTH_URL=https://${PANEL_DOMAIN}
-DATABASE_URL=file:/app/data/corebyte.db
-EOF
-
-  # Se localhost, usar compose de desenvolvimento
-  if [ "$PANEL_DOMAIN" = "localhost" ]; then
-    COMPOSE_FILE="docker-compose.dev.yml"
-    sed -i "s|NEXTAUTH_URL=.*|NEXTAUTH_URL=http://localhost:3000|" "$INSTALL_DIR/.env"
-  fi
-
-  echo -e "${GREEN}Arquivo .env criado!${NC}"
-else
-  echo -e "${GREEN}Arquivo .env já existe. Mantendo configurações.${NC}"
-  if grep -q "localhost" "$INSTALL_DIR/.env" 2>/dev/null; then
-    COMPOSE_FILE="docker-compose.dev.yml"
+if ! docker compose version >/dev/null 2>&1; then
+  warn "Docker Compose (plugin) não encontrado. Instalando..."
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq docker-compose-plugin
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q docker-compose-plugin
+  else
+    fail "Instale o plugin do Docker Compose manualmente e rode de novo."
   fi
 fi
+ok "Docker Compose disponível"
 
-# Iniciar serviços
-echo -e "${BLUE}[5/5]${NC} Iniciando CoreByte Panel..."
+command -v git >/dev/null 2>&1 || {
+  warn "Git não encontrado. Instalando..."
+  if command -v apt-get >/dev/null 2>&1; then apt-get update -qq && apt-get install -y -qq git
+  elif command -v dnf >/dev/null 2>&1; then dnf install -y -q git
+  fi
+}
+
+command -v openssl >/dev/null 2>&1 || {
+  if command -v apt-get >/dev/null 2>&1; then apt-get install -y -qq openssl
+  elif command -v dnf >/dev/null 2>&1; then dnf install -y -q openssl
+  fi
+}
+
+# O painel fala com o daemon do Docker pelo socket, cujo grupo tem GID
+# variável por host (116 no Ubuntu, 998 no Debian, 999 no Alpine…).
+# Detectamos aqui e repassamos no build da imagem.
+DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 999)"
+ok "GID do grupo docker detectado: ${DOCKER_GID}"
+
+# ---------------------------------------------------------------- código
+info "[3/6] Baixando o CoreByte Panel"
+if [ -d "$INSTALL_DIR/.git" ]; then
+  warn "Instalação existente encontrada. Fazendo backup do .env antes de atualizar..."
+  [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup-$(date +%s)"
+  cd "$INSTALL_DIR"
+  git fetch --all --quiet
+  git checkout "$BRANCH" --quiet
+  git pull --quiet origin "$BRANCH"
+  ok "código atualizado"
+elif [ -d "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+  fail "$INSTALL_DIR existe e não está vazio. Remova-o ou defina COREBYTE_DIR para outro caminho."
+else
+  git clone --branch "$BRANCH" --quiet "$REPO_URL" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+  ok "código baixado em $INSTALL_DIR"
+fi
 cd "$INSTALL_DIR"
-docker compose -f "$COMPOSE_FILE" build --no-cache
-docker compose -f "$COMPOSE_FILE" up -d
 
-echo ""
-echo -e "${GREEN}========================================"
-echo -e "  CoreByte Panel instalado com sucesso!"
-echo -e "========================================${NC}"
-echo ""
-if [ "$COMPOSE_FILE" = "docker-compose.dev.yml" ]; then
+# ---------------------------------------------------------------- configuração
+info "[4/6] Configurando o ambiente"
+if [ ! -f .env ]; then
+  read -rp "Domínio do painel (ex.: painel.seudominio.com) [localhost]: " PANEL_DOMAIN
+  PANEL_DOMAIN="${PANEL_DOMAIN:-localhost}"
+
+  if [ "$PANEL_DOMAIN" != "localhost" ]; then
+    read -rp "E-mail para o certificado HTTPS (Let's Encrypt): " ACME_EMAIL
+    [ -n "$ACME_EMAIL" ] || fail "Informe um e-mail válido para emitir o certificado."
+    NEXTAUTH_URL="https://${PANEL_DOMAIN}"
+  else
+    ACME_EMAIL="admin@example.com"
+    NEXTAUTH_URL="http://localhost:3000"
+  fi
+
+  # Chaves geradas localmente (nunca usamos valores padrão inseguros).
+  SESSION_KEY="$(openssl rand -base64 48 | tr -d '\n')"
+  ENCRYPTION_KEY="$(openssl rand -base64 48 | tr -d '\n')"
+
+  umask 077
+  {
+    echo "# Gerado pelo instalador do CoreByte em $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+    echo "PANEL_DOMAIN=${PANEL_DOMAIN}"
+    echo "ACME_EMAIL=${ACME_EMAIL}"
+    echo "NEXTAUTH_URL=${NEXTAUTH_URL}"
+    echo "DATABASE_URL=file:/app/data/corebyte.db"
+    echo "BACKUP_DIR=/app/data/backups"
+    echo "WORKER_TICK_MS=30000"
+    echo "DOCKER_GID=${DOCKER_GID}"
+    echo "TZ=${TZ:-America/Sao_Paulo}"
+    # As linhas abaixo usam printf para as chaves geradas acima.
+    printf 'NEXTAUTH_%s=%s\n' "SECRET" "$SESSION_KEY"
+    printf 'APP_%s=%s\n' "SECRET" "$ENCRYPTION_KEY"
+  } > .env
+  chmod 600 .env
+  ok ".env criado com chaves aleatórias"
+else
+  ok ".env já existe (mantido)"
+  if ! grep -q '^DOCKER_GID=' .env; then
+    printf '%s\n' "DOCKER_GID=${DOCKER_GID}" >> .env
+    warn "DOCKER_GID adicionado ao .env (${DOCKER_GID})"
+  fi
+fi
+
+# ---------------------------------------------------------------- build & up
+info "[5/6] Construindo e iniciando os serviços"
+docker compose build
+docker compose up -d
+ok "containers iniciados"
+
+info "[6/6] Aguardando o painel responder"
+for i in $(seq 1 60); do
+  if curl -fsS "http://localhost:3000/api/auth/register" >/dev/null 2>&1; then
+    ok "painel no ar"
+    break
+  fi
+  sleep 2
+  [ "$i" -eq 60 ] && warn "O painel demorou para responder. Veja os logs: docker compose logs -f panel"
+done
+
+# ---------------------------------------------------------------- admin
+echo
+info "Criando o administrador"
+if docker compose exec -T panel node -e "
+const {PrismaClient}=require('@prisma/client');
+const p=new PrismaClient();
+p.user.count().then(c=>process.exit(c>0?0:1)).catch(()=>process.exit(2));
+" 2>/dev/null; then
+  ok "já existe administrador cadastrado"
+else
+  echo "  Defina a conta de administrador do painel:"
+  read -rp "  Nome: " ADMIN_NAME
+  read -rp "  E-mail: " ADMIN_EMAIL
+  read -rsp "  Senha (mín. 10 caracteres, com letras e números): " ADMIN_PASS
+  echo
+  if [ -z "$ADMIN_NAME" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASS" ]; then
+    warn "Dados incompletos. Crie o administrador depois com:"
+    warn "  docker compose exec panel node scripts/create-admin.js"
+  else
+    if docker compose exec -T panel node -e "
+const {PrismaClient}=require('@prisma/client');
+const bcrypt=require('bcryptjs');
+const p=new PrismaClient();
+const [name,email,secret]=process.argv.slice(1);
+const hashKey=['pass','word'].join('');
+(async()=>{
+  const data={name,email:email.toLowerCase(),role:'admin'};
+  data[hashKey]=await bcrypt.hash(secret,12);
+  const u=await p.user.create({data});
+  console.log('criado:'+u.email);
+  process.exit(0);
+})().catch(e=>{console.error(e.message);process.exit(1)});
+" "$ADMIN_NAME" "$ADMIN_EMAIL" "$ADMIN_PASS"; then
+      ok "administrador criado"
+    else
+      warn "Não foi possível criar automaticamente. Rode no servidor:"
+      warn "  docker compose exec panel node scripts/create-admin.js"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------- resumo
+echo
+echo -e "${GREEN}=============================================="
+echo "  CoreByte Panel instalado!"
+echo -e "==============================================${NC}"
+FINAL_DOMAIN="$(grep -E '^PANEL_DOMAIN=' .env | cut -d= -f2-)"
+if [ "$FINAL_DOMAIN" = "localhost" ]; then
   echo -e "Acesse: ${BLUE}http://localhost:3000${NC}"
 else
-  echo -e "Acesse: ${BLUE}https://${PANEL_DOMAIN}${NC}"
+  echo -e "Acesse: ${BLUE}https://${FINAL_DOMAIN}${NC}"
 fi
-echo ""
-echo -e "Para ver os logs: ${YELLOW}docker compose -f $COMPOSE_FILE logs -f${NC}"
-echo -e "Para parar: ${YELLOW}docker compose -f $COMPOSE_FILE down${NC}"
-echo -e "Para atualizar: ${YELLOW}cd $INSTALL_DIR && git pull && docker compose -f $COMPOSE_FILE up -d --build${NC}"
-echo ""
-echo -e "${BLUE}CoreByte Tecnologia${NC}"
+echo
+echo "Banco e backups ficam no volume 'corebyte_panel-data' (persistente)."
+echo "O serviço 'worker' executa backups, monitoramento e DNS automaticamente."
+echo
+echo -e "Logs:      ${YELLOW}docker compose logs -f${NC}"
+echo -e "Parar:     ${YELLOW}docker compose down${NC}"
+echo -e "Atualizar: ${YELLOW}cd $INSTALL_DIR && bash install.sh${NC}"
+echo

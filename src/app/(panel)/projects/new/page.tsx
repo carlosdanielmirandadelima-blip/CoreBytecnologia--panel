@@ -90,7 +90,9 @@ export default function NewProjectPage() {
             envVars: parsedEnvVars,
           };
         });
-        setTemplates(parsed);
+        // Os campos vindos da API são validados em runtime acima;
+        // o cast apenas reflete o formato já montado.
+        setTemplates((parsed as unknown as Template[]).filter((t) => t && t.id && t.name));
       })
       .catch(() => toast.error("Erro ao carregar templates"));
   }, []);

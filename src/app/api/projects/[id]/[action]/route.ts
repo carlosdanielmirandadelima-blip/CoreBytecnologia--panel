@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { deployProject, startProject, stopProject } from "@/lib/deploy";
+import { writeAudit } from "@/lib/audit";
 
 export async function POST(
   req: Request,
   { params }: { params: { id: string; action: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "projects.post", resource: "projects", details: `Operação post em projects` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 

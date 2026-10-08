@@ -41,7 +41,7 @@ export default function DynamicDnsPage() {
   const [zoneId, setZoneId] = useState("");
   const [recordId, setRecordId] = useState("");
   const [token, setToken] = useState("");
-  const [interval, setInterval_] = useState(300);
+  const [intervalSecs, setIntervalSecs] = useState(300);
   const [creating, setCreating] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
 
@@ -61,7 +61,7 @@ export default function DynamicDnsPage() {
       const res = await fetch("/api/dynamic-dns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostname, zoneId, recordId, token, interval: interval_ }),
+        body: JSON.stringify({ hostname, zoneId, recordId, token, interval: intervalSecs }),
       });
       if (res.ok) {
         toast.success("Registro DDNS criado!");
@@ -136,7 +136,7 @@ export default function DynamicDnsPage() {
               </div>
               <div>
                 <label className="text-xs text-white/50 mb-1 block">Intervalo (segundos)</label>
-                <Input type="number" value={interval_} onChange={(e) => setInterval_(Number(e.target.value))} placeholder="300"
+                <Input type="number" value={intervalSecs} onChange={(e) => setIntervalSecs(Number(e.target.value))} placeholder="300"
                   className="bg-white/5 border-white/10 text-white h-9 text-sm" />
               </div>
             </div>

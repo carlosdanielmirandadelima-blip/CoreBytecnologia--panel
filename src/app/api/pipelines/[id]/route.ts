@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { writeAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
@@ -22,6 +23,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "pipelines.delete", resource: "pipelines", details: `Operação delete em pipelines` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

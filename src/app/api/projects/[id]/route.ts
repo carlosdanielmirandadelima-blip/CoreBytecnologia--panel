@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { removeProject, syncProjectStatus } from "@/lib/deploy";
+import { writeAudit } from "@/lib/audit";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -15,6 +16,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "projects.put", resource: "projects", details: `Operação put em projects` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
@@ -26,7 +29,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (description !== undefined) updateData.description = description;
   if (domain !== undefined) updateData.domain = domain;
 
-  const project = await prisma.project.update({
+  await prisma.project.update({
     where: { id: params.id },
     data: updateData,
     include: { services: true, envVars: true },
@@ -50,6 +53,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "projects.delete", resource: "projects", details: `Operação delete em projects` });
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 

@@ -69,7 +69,7 @@ function generateComposeYaml(projectName: string, services: ComposeService[]): s
   }
   if (volumeNames.size > 0) {
     yaml += `volumes:\n`;
-    for (const name of volumeNames) {
+    for (const name of Array.from(volumeNames)) {
       yaml += `  ${name}:\n`;
     }
   }
@@ -117,7 +117,7 @@ export default function ComposeEditorPage() {
 
   const updateService = (index: number, field: keyof ComposeService, value: string) => {
     const updated = [...services];
-    (updated[index] as Record<string, unknown>)[field] = value;
+    (updated[index] as unknown as Record<string, string>)[field] = value;
     setServices(updated);
   };
 

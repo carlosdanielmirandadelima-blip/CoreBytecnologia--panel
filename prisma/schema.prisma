@@ -114,6 +114,9 @@ model Backup {
   status        String    @default("pending")
   scheduleId    String?
   schedule      BackupSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  cloudProviderId String? @default("")
+  remotePath    String    @default("")
+  uploadedAt    DateTime?
   createdAt     DateTime  @default(now())
 }
 
@@ -136,7 +139,9 @@ model BackupSchedule {
 model CloudProvider {
   id            String    @id @default(cuid())
   name          String
-  type          String    // google_drive, dropbox, terabox
+  type          String    // s3, google_drive, onedrive, dropbox, box, pcloud, mega, terabox, webdav, ftp, sftp
+  authType      String    @default("credentials") // credentials | oauth | service_account
+  config        String    @default("{}") // credenciais CIFRADAS (AES-256-GCM)
   accessToken   String?
   refreshToken  String?
   clientId      String?
@@ -146,6 +151,7 @@ model CloudProvider {
   autoBackup    Boolean   @default(false)
   autoFrequency String    @default("daily") // daily, weekly, monthly
   lastSync      DateTime?
+  lastError     String    @default("")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

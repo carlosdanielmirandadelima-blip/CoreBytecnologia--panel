@@ -1,233 +1,99 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
 import { prisma } from "@/lib/prisma";
-import { existsSync, statSync, createReadStream } from "fs";
-import https from "https";
-import http from "http";
+import { requireSession } from "@/lib/session";
+import { decryptConfig } from "@/lib/crypto";
+import { createAdapter, describeError } from "@/lib/storage";
+import { resolveType } from "@/lib/storage/providers";
+import { assertInsideBackupDir } from "@/lib/backup";
+import { writeAudit } from "@/lib/audit";
 
-async function uploadToGoogleDrive(
-  filePath: string,
-  fileName: string,
-  accessToken: string,
-  folder: string
-): Promise<{ success: boolean; fileId?: string; error?: string }> {
+/**
+ * Envia um backup para a nuvem.
+ *
+ * Antes: rota pública (qualquer pessoa podia mandar os backups de um
+ * cliente para uma conta escolhida por ela) e usando apenas Dropbox/Google
+ * Drive com tokens fixos, sem validação.
+ * Agora: exige sessão, cifra credenciais e usa os adaptadores com multipart.
+ */
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const { user, error } = await requireSession();
+  if (error) return error;
+
   try {
-    const fileStats = statSync(filePath);
-    const metadata = JSON.stringify({
-      name: fileName,
-      parents: folder ? [folder] : undefined,
-    });
-
-    // Simple upload via multipart
-    const boundary = "----CloudBackupBoundary" + Date.now();
-    const metaPart =
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
-    const filePart = `--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`;
-    const endBoundary = `\r\n--${boundary}--`;
-
-    const bodyLength = Buffer.byteLength(metaPart) + fileStats.size + Buffer.byteLength(filePart) + Buffer.byteLength(endBoundary);
-
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          hostname: "www.googleapis.com",
-          path: "/upload/drive/v3/files?uploadType=multipart",
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": `multipart/related; boundary=${boundary}`,
-            "Content-Length": bodyLength,
-          },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => (data += chunk.toString()));
-          res.on("end", () => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              const parsed = JSON.parse(data);
-              resolve({ success: true, fileId: parsed.id });
-            } else {
-              resolve({ success: false, error: `HTTP ${res.statusCode}: ${data}` });
-            }
-          });
-        }
-      );
-      req.on("error", (err: Error) => resolve({ success: false, error: err.message }));
-      req.write(metaPart);
-      req.write(filePart);
-      const stream = createReadStream(filePath);
-      stream.on("data", (chunk: Buffer) => req.write(chunk));
-      stream.on("end", () => {
-        req.write(endBoundary);
-        req.end();
-      });
-    });
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
-  }
-}
-
-async function uploadToDropbox(
-  filePath: string,
-  fileName: string,
-  accessToken: string,
-  folder: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const fileData = require("fs").readFileSync(filePath);
-    const dropboxPath = `${folder || "/CoreByte-Backups"}/${fileName}`;
-
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          hostname: "content.dropboxapi.com",
-          path: "/2/files/upload",
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/octet-stream",
-            "Dropbox-API-Arg": JSON.stringify({
-              path: dropboxPath,
-              mode: "add",
-              autorename: true,
-            }),
-          },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => (data += chunk.toString()));
-          res.on("end", () => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              resolve({ success: true });
-            } else {
-              resolve({ success: false, error: `HTTP ${res.statusCode}: ${data}` });
-            }
-          });
-        }
-      );
-      req.on("error", (err: Error) => resolve({ success: false, error: err.message }));
-      req.write(fileData);
-      req.end();
-    });
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
-  }
-}
-
-async function uploadToTerabox(
-  filePath: string,
-  fileName: string,
-  accessToken: string,
-  folder: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const fileData = require("fs").readFileSync(filePath);
-    const remotePath = `${folder || "/CoreByte-Backups"}/${fileName}`;
-
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          hostname: "www.terabox.com",
-          path: `/api/upload?access_token=${encodeURIComponent(accessToken)}&path=${encodeURIComponent(remotePath)}`,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/octet-stream",
-          },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => (data += chunk.toString()));
-          res.on("end", () => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              resolve({ success: true });
-            } else {
-              resolve({ success: false, error: `HTTP ${res.statusCode}: ${data}` });
-            }
-          });
-        }
-      );
-      req.on("error", (err: Error) => resolve({ success: false, error: err.message }));
-      req.write(fileData);
-      req.end();
-    });
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
-  }
-}
-
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const { id } = params;
-    const body = await req.json();
-    const { providerId } = body;
-
+    const body = (await req.json().catch(() => ({}))) as { providerId?: string };
+    const providerId = String(body.providerId || "");
     if (!providerId) {
-      return NextResponse.json({ error: "providerId é obrigatório" }, { status: 400 });
+      return NextResponse.json({ error: "Informe o provedor de nuvem (providerId)" }, { status: 400 });
     }
 
-    const backup = await prisma.backup.findUnique({ where: { id } });
-    if (!backup) {
-      return NextResponse.json({ error: "Backup não encontrado" }, { status: 404 });
-    }
-
+    const backup = await prisma.backup.findUnique({ where: { id: params.id } });
+    if (!backup) return NextResponse.json({ error: "Backup não encontrado" }, { status: 404 });
     if (backup.status !== "completed") {
-      return NextResponse.json({ error: "Backup ainda não completou" }, { status: 400 });
+      return NextResponse.json({ error: "O backup ainda não foi concluído" }, { status: 400 });
     }
 
-    if (!existsSync(backup.filePath)) {
-      return NextResponse.json({ error: "Arquivo de backup não encontrado no disco" }, { status: 404 });
+    const filePath = assertInsideBackupDir(backup.filePath);
+    if (!fs.existsSync(filePath)) {
+      return NextResponse.json({ error: "O arquivo de backup não está mais no disco" }, { status: 404 });
     }
 
     const provider = await prisma.cloudProvider.findUnique({ where: { id: providerId } });
-    if (!provider) {
-      return NextResponse.json({ error: "Provider não encontrado" }, { status: 404 });
+    if (!provider) return NextResponse.json({ error: "Provedor de nuvem não encontrado" }, { status: 404 });
+    if (!provider.enabled) {
+      return NextResponse.json({ error: "Este provedor está desativado" }, { status: 400 });
     }
 
-    if (!provider.accessToken) {
-      return NextResponse.json({ error: "Token de acesso não configurado" }, { status: 400 });
+    const type = resolveType(provider.type);
+    if (!type) {
+      return NextResponse.json({ error: `Tipo de armazenamento não suportado: ${provider.type}` }, { status: 400 });
     }
 
-    let result: { success: boolean; error?: string };
+    const config = decryptConfig(provider.config);
+    const adapter = createAdapter(type, config, provider.folder || undefined, provider.type);
 
-    switch (provider.type) {
-      case "google_drive":
-        result = await uploadToGoogleDrive(
-          backup.filePath,
-          backup.fileName,
-          provider.accessToken,
-          provider.folder || ""
-        );
-        break;
-      case "dropbox":
-        result = await uploadToDropbox(
-          backup.filePath,
-          backup.fileName,
-          provider.accessToken,
-          provider.folder || "/CoreByte-Backups"
-        );
-        break;
-      case "terabox":
-        result = await uploadToTerabox(
-          backup.filePath,
-          backup.fileName,
-          provider.accessToken,
-          provider.folder || "/CoreByte-Backups"
-        );
-        break;
-      default:
-        return NextResponse.json({ error: "Tipo de provider não suportado" }, { status: 400 });
-    }
+    const remotePath = await adapter.upload(filePath, backup.fileName);
 
-    if (result.success) {
-      await prisma.cloudProvider.update({
-        where: { id: providerId },
-        data: { lastSync: new Date() },
-      });
-      return NextResponse.json({ ok: true, message: "Backup enviado para a nuvem com sucesso!" });
-    } else {
-      return NextResponse.json({ error: result.error || "Falha no upload" }, { status: 500 });
+    await prisma.backup.update({
+      where: { id: backup.id },
+      data: {
+        cloudProviderId: provider.id,
+        remotePath,
+        uploadedAt: new Date(),
+      },
+    });
+    await prisma.cloudProvider.update({
+      where: { id: provider.id },
+      data: { lastSync: new Date(), lastError: "" },
+    });
+
+    await writeAudit(req, {
+      action: "backup.upload-cloud",
+      resource: "backup",
+      resourceId: backup.id,
+      details: `Backup "${backup.fileName}" enviado para ${provider.name}`,
+      user,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      message: `Backup enviado para ${provider.name}`,
+      remotePath,
+    });
+  } catch (e) {
+    const message = describeError(e);
+    // Registra a falha no provedor para aparecer na interface.
+    try {
+      const body = (await req.clone().json()) as { providerId?: string };
+      if (body?.providerId) {
+        await prisma.cloudProvider.update({
+          where: { id: body.providerId },
+          data: { lastError: message.slice(0, 500) },
+        });
+      }
+    } catch {
+      // ignora
     }
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Erro";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

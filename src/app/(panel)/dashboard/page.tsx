@@ -41,6 +41,7 @@ interface Project {
   domain: string;
   services: { id: string; name: string; status: string }[];
   createdAt: string;
+  environment: string;
 }
 
 function formatBytes(bytes: number): string {

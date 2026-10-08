@@ -1,116 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireSession } from "@/lib/session";
+import { isWorkerRequest } from "@/lib/worker-auth";
 import { prisma } from "@/lib/prisma";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { checkMonitor } from "@/lib/monitor";
+import { writeAudit } from "@/lib/audit";
 
-const execAsync = promisify(exec);
-
-async function checkHttp(url: string, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
-  const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout * 1000);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    const responseTime = Date.now() - start;
-    return {
-      status: res.ok ? "up" : "degraded",
-      responseTime,
-      message: `HTTP ${res.status}`,
-    };
-  } catch {
-    return { status: "down", responseTime: Date.now() - start, message: "Connection failed" };
+/**
+ * Executa as checagens de uma página de status sob demanda.
+ *
+ * Antes: o TCP era testado com `bash -c 'echo > /dev/tcp/host/port'` e o ping
+ * com `ping -c 1 ...`, ambos montados por string — injeção de comando pelo
+ * campo `target` do monitor. Agora a checagem usa socket nativo e execFile.
+ */
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  // Trilha de auditoria desta operação.
+  await writeAudit(null, { action: "status-pages.post", resource: "status-pages", details: `Operação post em status-pages` });
+  const fromWorker = await isWorkerRequest(req);
+  if (!fromWorker) {
+    const { error } = await requireSession();
+    if (error) return error;
   }
-}
-
-async function checkTcp(host: string, port: number, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
-  const start = Date.now();
-  try {
-    await execAsync(`timeout ${timeout} bash -c 'echo > /dev/tcp/${host}/${port}'`, { timeout: timeout * 1000 });
-    return { status: "up", responseTime: Date.now() - start, message: `TCP ${host}:${port} open` };
-  } catch {
-    return { status: "down", responseTime: Date.now() - start, message: `TCP ${host}:${port} closed` };
-  }
-}
-
-async function checkPing(host: string, timeout: number): Promise<{ status: string; responseTime: number; message: string }> {
-  const start = Date.now();
-  try {
-    const { stdout } = await execAsync(`ping -c 1 -W ${timeout} ${host}`, { timeout: timeout * 1000 });
-    const match = stdout.match(/time=(\d+\.?\d*)/);
-    const responseTime = match ? parseFloat(match[1]) : Date.now() - start;
-    return { status: "up", responseTime: Math.round(responseTime), message: `Ping ${responseTime}ms` };
-  } catch {
-    return { status: "down", responseTime: Date.now() - start, message: "Ping failed" };
-  }
-}
-
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const page = await prisma.statusPage.findUnique({
     where: { id: params.id },
     include: { monitors: true },
   });
+  if (!page) return NextResponse.json({ error: "Página não encontrada" }, { status: 404 });
 
-  if (!page) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const results = [];
+  const results: unknown[] = [];
 
   for (const monitor of page.monitors) {
-    let result: { status: string; responseTime: number; message: string };
+    try {
+      const result = await checkMonitor(monitor);
 
-    switch (monitor.type) {
-      case "http":
-      case "https":
-        result = await checkHttp(monitor.target, monitor.timeout);
-        break;
-      case "tcp": {
-        const [host, port] = monitor.target.split(":");
-        result = await checkTcp(host, parseInt(port) || 80, monitor.timeout);
-        break;
+      await prisma.statusCheck.create({
+        data: {
+          status: result.status,
+          responseTime: result.responseTime,
+          message: result.message,
+          monitorId: monitor.id,
+        },
+      });
+
+      // Mantém somente o histórico recente.
+      const old = await prisma.statusCheck.findMany({
+        where: { monitorId: monitor.id },
+        orderBy: { createdAt: "desc" },
+        skip: 500,
+        select: { id: true },
+      });
+      if (old.length) {
+        await prisma.statusCheck.deleteMany({ where: { id: { in: old.map((o) => o.id) } } });
       }
-      case "ping":
-        result = await checkPing(monitor.target, monitor.timeout);
-        break;
-      default:
-        result = { status: "unknown", responseTime: 0, message: "Tipo desconhecido" };
+
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recent = await prisma.statusCheck.findMany({
+        where: { monitorId: monitor.id, createdAt: { gte: since } },
+        select: { status: true },
+      });
+      const up = recent.filter((c) => c.status === "up").length;
+      const uptime24h = recent.length ? Math.round((up / recent.length) * 1000) / 10 : 100;
+
+      await prisma.statusMonitor.update({
+        where: { id: monitor.id },
+        data: {
+          status: result.status,
+          lastCheck: new Date(),
+          lastResponse: result.responseTime,
+          uptime24h,
+        },
+      });
+
+      results.push({ monitor: monitor.name, ...result });
+    } catch (e) {
+      results.push({
+        monitor: monitor.name,
+        status: "unknown",
+        error: e instanceof Error ? e.message : "erro na checagem",
+      });
     }
-
-    await prisma.statusCheck.create({
-      data: {
-        status: result.status,
-        responseTime: result.responseTime,
-        message: result.message,
-        monitorId: monitor.id,
-      },
-    });
-
-    // Calculate 24h uptime
-    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recentChecks = await prisma.statusCheck.findMany({
-      where: { monitorId: monitor.id, createdAt: { gte: last24h } },
-    });
-    const upChecks = recentChecks.filter((c) => c.status === "up").length;
-    const uptime24h = recentChecks.length > 0 ? Math.round((upChecks / recentChecks.length) * 100 * 10) / 10 : 100;
-
-    await prisma.statusMonitor.update({
-      where: { id: monitor.id },
-      data: {
-        status: result.status,
-        lastCheck: new Date(),
-        lastResponse: result.responseTime,
-        uptime24h,
-      },
-    });
-
-    results.push({ monitor: monitor.name, ...result });
   }
 
   return NextResponse.json({ checked: results.length, results });

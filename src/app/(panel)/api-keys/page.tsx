@@ -57,7 +57,8 @@ export default function ApiKeysPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNewKey(data.fullKey);
+        // A chave completa vem só na criação (o banco guarda apenas o hash).
+        setNewKey(data.key);
         setShowNew(false);
         setName("");
         toast.success("API Key criada! Copie-a agora, ela não será mostrada novamente.");

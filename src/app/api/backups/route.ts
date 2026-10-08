@@ -1,85 +1,113 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs";
-import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/session";
+import { runBackup, listBackupFiles, assertInsideBackupDir } from "@/lib/backup";
+import { ensurePanelNetwork } from "@/lib/docker";
+import { assertBackupSource, assertString, ValidationError } from "@/lib/validate";
+import { writeAudit } from "@/lib/audit";
 
-const execAsync = promisify(exec);
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+/**
+ * Lista e cria backups.
+ *
+ * Antes esta rota montava comandos de shell interpolando o campo `source`
+ * (injeção de comando) e usava o binário `docker`, que não existe na imagem.
+ */
 
-if (!fs.existsSync(BACKUP_DIR)) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-}
+const BACKUP_TYPES = ["volume", "container", "file"];
 
+/** GET /api/backups */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { error } = await requireSession();
+  if (error) return error;
 
-  const backups = await prisma.backup.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { schedule: true },
-  });
+  const backups = await prisma.backup.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+  const onDisk = await listBackupFiles();
 
-  return NextResponse.json(backups);
+  return NextResponse.json(
+    backups.map((b) => ({
+      ...b,
+      existsOnDisk: b.filePath ? onDisk.has(b.fileName) : false,
+      diskSize: onDisk.get(b.fileName) ?? null,
+    }))
+  );
 }
 
+/** POST /api/backups — inicia um backup sob demanda. */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { user, error } = await requireSession();
+  if (error) return error;
 
   try {
-    const body = await req.json();
-    const { name, type, source } = body;
+    const body = (await req.json()) as {
+      name?: string;
+      type?: string;
+      source?: string;
+      scheduleId?: string;
+    };
 
-    if (!name || !source) {
-      return NextResponse.json({ error: "Nome e source são obrigatórios" }, { status: 400 });
-    }
+    const type = BACKUP_TYPES.includes(String(body.type)) ? String(body.type) : "volume";
+    const name = assertString(body.name, "nome", 120, true);
+    // Allow-list de formato: é isto que impede a injeção de comando.
+    const source = assertBackupSource(body.source, type);
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = `${name.replace(/\s+/g, "-").toLowerCase()}_${timestamp}.tar.gz`;
-    const filePath = path.join(BACKUP_DIR, fileName);
+    await ensurePanelNetwork();
 
-    const backup = await prisma.backup.create({
-      data: {
-        name,
-        type: type || "volume",
-        source,
-        fileName,
-        filePath,
-        status: "running",
-      },
+    const result = await runBackup({ name, type, source });
+
+    await writeAudit(req, {
+      action: "backup.create",
+      resource: "backup",
+      resourceId: result.id,
+      details: `Backup "${name}" (${type}: ${source}) concluído`,
+      user,
     });
 
-    (async () => {
-      try {
-        if (type === "volume") {
-          await execAsync(
-            `docker run --rm -v ${source}:/data -v ${BACKUP_DIR}:/backup alpine tar czf /backup/${fileName} -C /data .`
-          );
-        } else if (type === "container") {
-          await execAsync(`docker export ${source} | gzip > ${filePath}`);
-        } else {
-          await execAsync(`tar czf ${filePath} ${source}`);
-        }
-
-        const stats = fs.statSync(filePath);
-        await prisma.backup.update({
-          where: { id: backup.id },
-          data: { status: "completed", fileSize: stats.size },
-        });
-      } catch {
-        await prisma.backup.update({
-          where: { id: backup.id },
-          data: { status: "failed" },
-        });
-      }
-    })();
-
-    return NextResponse.json(backup, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Erro ao criar backup" }, { status: 500 });
+    return NextResponse.json(
+      {
+        id: result.id,
+        status: result.status,
+        fileName: result.fileName,
+        fileSize: result.size,
+        message: "Backup concluído",
+      },
+      { status: 201 }
+    );
+  } catch (e) {
+    if (e instanceof ValidationError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    const msg = e instanceof Error ? e.message : "Erro ao criar backup";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+/** DELETE /api/backups — limpa todos os registros e arquivos órfãos. */
+export async function DELETE(req: NextRequest) {
+  const { user, error } = await requireSession();
+  if (error) return error;
+
+  const backups = await prisma.backup.findMany();
+  let removed = 0;
+  for (const b of backups) {
+    try {
+      if (b.filePath && fs.existsSync(assertInsideBackupDir(b.filePath))) {
+        fs.unlinkSync(assertInsideBackupDir(b.filePath));
+      }
+    } catch {
+      // arquivo já removido
+    }
+    await prisma.backup.delete({ where: { id: b.id } });
+    removed++;
+  }
+
+  await writeAudit(req, {
+    action: "backup.clear",
+    resource: "backup",
+    details: `${removed} backup(s) removido(s)`,
+    user,
+  });
+
+  return NextResponse.json({ ok: true, removed });
+}
+

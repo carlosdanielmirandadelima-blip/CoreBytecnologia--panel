@@ -226,9 +226,9 @@ export default function DnsPage() {
                       <p className="text-xs text-white/30 truncate">{record.content}</p>
                     </div>
                     {record.proxied ? (
-                      <Shield className="h-3.5 w-3.5 text-orange-400" title="Proxied" />
+                      <span title="Proxied"><Shield className="h-3.5 w-3.5 text-orange-400" /></span>
                     ) : (
-                      <ShieldOff className="h-3.5 w-3.5 text-white/20" title="DNS only" />
+                      <span title="DNS only"><ShieldOff className="h-3.5 w-3.5 text-white/20" /></span>
                     )}
                   </div>
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400/50 hover:text-red-400"
