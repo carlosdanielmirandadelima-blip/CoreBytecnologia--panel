@@ -64,6 +64,7 @@ export default function NewProjectPage() {
   const [customImage, setCustomImage] = useState("");
   const [customPorts, setCustomPorts] = useState("");
   const [customVolumes, setCustomVolumes] = useState("");
+  const [customDomain, setCustomDomain] = useState("");
 
   // Environment
   const [environment, setEnvironment] = useState("production");
@@ -154,8 +155,10 @@ export default function NewProjectPage() {
   };
 
   const handleCreateCustom = async () => {
-    if (!name || !customImage) {
-      toast.error("Nome e imagem são obrigatórios");
+    // Só o nome é obrigatório: a imagem é opcional. Sem imagem, o projeto é
+    // criado vazio e você adiciona os serviços depois (um ou vários).
+    if (!name) {
+      toast.error("Informe o nome do projeto");
       return;
     }
     setLoading(true);
@@ -168,19 +171,37 @@ export default function NewProjectPage() {
           description,
           type: "custom",
           environment,
-          services: [{
-            name: name,
-            image: customImage,
-            ports: customPorts,
-            volumes: customVolumes,
-          }],
+          domain: customDomain,
+          // Sem imagem: não envia serviços (projeto vazio).
+          services: customImage
+            ? [
+                {
+                  name: name,
+                  image: customImage,
+                  ports: customPorts,
+                  volumes: customVolumes,
+                },
+              ]
+            : [],
           envVars,
         }),
       });
       if (res.ok) {
         const project = await res.json();
-        toast.success("Projeto criado! Iniciando deploy...");
-        await fetch(`/api/projects/${project.id}/deploy`, { method: "POST" });
+        const comImagem = Boolean(customImage);
+        toast.success(
+          comImagem
+            ? "Projeto criado! Iniciando deploy..."
+            : "Projeto criado vazio. Adicione os serviços na próxima tela."
+        );
+        // Só implanta quando já existe ao menos um serviço.
+        if (comImagem) {
+          const dep = await fetch(`/api/projects/${project.id}/deploy`, { method: "POST" });
+          if (!dep.ok) {
+            const d = await dep.json().catch(() => ({}));
+            toast.error(d.error ?? "Falha ao implantar; verifique o serviço na próxima tela.");
+          }
+        }
         router.push(`/projects/${project.id}`);
       } else {
         const data = await res.json();
@@ -376,8 +397,11 @@ export default function NewProjectPage() {
         <TabsContent value="custom" className="mt-6">
           <Card className="bg-[#111] border-white/10">
             <CardHeader>
-              <CardTitle className="text-white text-lg">Container Customizado</CardTitle>
-              <p className="text-sm text-white/40">Deploy de qualquer imagem Docker</p>
+              <CardTitle className="text-white text-lg">Novo projeto</CardTitle>
+              <p className="text-sm text-white/40">
+                Dê um nome e crie — com ou sem serviço agora. Depois você pode adicionar vários
+                serviços (app, banco, cache) dentro deste mesmo projeto.
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -387,9 +411,14 @@ export default function NewProjectPage() {
                     className="bg-white/5 border-white/10 text-white" placeholder="meu-app" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-white/70">Imagem Docker</Label>
+                  <Label className="text-white/70">
+                    Imagem Docker <span className="text-white/30">(opcional)</span>
+                  </Label>
                   <Input value={customImage} onChange={(e) => setCustomImage(e.target.value)}
-                    className="bg-white/5 border-white/10 text-white" placeholder="nginx:latest" />
+                    className="bg-white/5 border-white/10 text-white" placeholder="deixe vazio para criar sem serviço" />
+                  <p className="text-[11px] text-white/35">
+                    Preenchendo aqui, o projeto nasce com um serviço e já é implantado.
+                  </p>
                 </div>
               </div>
 
@@ -421,6 +450,18 @@ export default function NewProjectPage() {
                   <Input value={customVolumes} onChange={(e) => setCustomVolumes(e.target.value)}
                     className="bg-white/5 border-white/10 text-white" placeholder="data:/app/data" />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-white/70">
+                  Domínio do projeto <span className="text-white/30">(opcional)</span>
+                </Label>
+                <Input value={customDomain} onChange={(e) => setCustomDomain(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white" placeholder="app.seudominio.com" />
+                <p className="text-[11px] text-white/35">
+                  Com domínio e porta, o serviço é publicado com HTTPS automático. Cada serviço pode
+                  ter o seu próprio domínio depois.
+                </p>
               </div>
 
               <div className="space-y-2">

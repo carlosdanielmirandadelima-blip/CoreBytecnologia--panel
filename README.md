@@ -10,9 +10,12 @@ automáticos** e mantenha seus backups em **23 serviços de nuvem**.
 
 ## O que ele faz
 
-- **Projetos e containers**: implante imagens Docker ou templates prontos
-  (WordPress, PostgreSQL, Redis, n8n, Uptime Kuma e outros), com variáveis de
-  ambiente, volumes e portas.
+- **Projetos com vários serviços**: cada projeto pode rodar **vários serviços
+  juntos** (app + banco + cache), cada um com sua imagem, portas, volumes,
+  variáveis próprias e domínio próprio. Dá para criar um projeto **vazio, só
+  com o nome**, e adicionar os serviços depois.
+- **Templates prontos**: WordPress, PostgreSQL, Redis, n8n, Uptime Kuma e
+  outros, com um clique.
 - **Domínio e HTTPS automáticos**: informe `app.seudominio.com` e o painel
   publica o serviço via Traefik com certificado Let's Encrypt. Sem editar
   arquivos de configuração.
@@ -67,15 +70,26 @@ docker compose exec panel node scripts/create-admin.js
 
 ## Primeiro acesso
 
-- Acesse a URL mostrada pelo instalador.
-- Entre com o e-mail e a senha que você definiu.
+Abra a URL mostrada pelo instalador. Como ainda não existe administrador, o
+painel abre direto a tela **"Bem-vindo ao CoreByte"**, onde você define:
+
+- seu nome;
+- **o e-mail de acesso**;
+- **a senha** (mínimo de 10 caracteres, com letras e números).
+
+O instalador mostra no terminal um **código de configuração** para colar nessa
+tela. Ele existe para impedir que um visitante crie o administrador antes de
+você. Depois de criar a conta, remova a linha `COREBYTE_SETUP_TOKEN` do `.env`.
+
+Se preferir criar pelo terminal:
+```bash
+docker compose exec panel node scripts/create-admin.js
+```
+
+Depois de entrar:
+
 - **Ative o 2FA** em *Configurações → Autenticação em dois fatores*.
 - Em *Backups → Nuvem*, conecte onde você quer guardar os backups.
-
-> Se ninguém se cadastrou ainda, o painel pede o **código de configuração**
-> (variável `COREBYTE_SETUP_TOKEN` no `.env`). Isso evita que um visitante crie
-> o administrador antes de você. O caminho recomendado é criar a conta pelo
-> terminal: `docker compose exec panel node scripts/create-admin.js`.
 
 ---
 
@@ -120,15 +134,36 @@ gravadas **cifradas** — um vazamento do banco não expõe suas chaves.
 
 ---
 
-## Deploy com domínio e HTTPS
+## Projetos com vários serviços
 
-1. *Projetos → Novo projeto* e escolha um template (ou uma imagem Docker).
-2. No projeto, informe o **domínio** (ex.: `app.seudominio.com`).
-3. Clique em **Deploy**.
+Um projeto é um agrupamento. Dentro dele você roda quantos serviços quiser:
 
-O painel cria o container na rede compartilhada e registra as labels do
-Traefik. O certificado é emitido no primeiro acesso (aponte o DNS do domínio
-para o IP do servidor antes).
+| Exemplo | Serviços do projeto |
+|---|---|
+| Loja virtual | `wordpress` (publicado) + `mysql` (interno) |
+| API + cache | `api` (publicado) + `postgres` (interno) + `redis` (interno) |
+| Site + painel | `site` (domínio A) + `admin` (domínio B) |
+
+Cada serviço tem:
+
+- **imagem**, **portas** (`8080:80`), **volumes** e **comando**;
+- **variáveis próprias** (as do serviço sobrescrevem as do projeto);
+- **Publicar em domínio**: ligado, o serviço ganha URL com HTTPS automático;
+  desligado, ele fica acessível só pela rede interna (ideal para banco e cache);
+- **domínio próprio**, quando você quer uma URL diferente por serviço.
+
+### Passo a passo
+
+1. *Projetos → Novo projeto*: informe só o **nome** e crie (pode nascer vazio).
+2. Na tela do projeto, aba **Serviços → Adicionar serviço**.
+   Use um dos modelos prontos (PostgreSQL, Redis, Nginx, Node, WordPress…) ou
+   preencha a imagem manualmente.
+3. Para o serviço que for site/api: marque **Publicar em domínio** e informe o
+   domínio (ou defina um domínio na aba *Configurações* do projeto).
+4. Clique em **Deploy**. Cada serviço vira um container; os publicados entram na
+   rede do Traefik com certificado Let's Encrypt.
+
+Aponte o DNS do domínio para o IP do servidor antes de esperar o certificado.
 
 ---
 

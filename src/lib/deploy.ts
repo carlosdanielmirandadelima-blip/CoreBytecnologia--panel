@@ -109,18 +109,35 @@ export async function deployProject(projectId: string, onLog?: (msg: string) => 
   });
   if (!project) throw new Error("Projeto não encontrado");
   if (!project.services.length) {
-    throw new Error("Este projeto não tem serviços para implantar. Use um template do Marketplace ou cadastre um serviço.");
+    throw new Error(
+      "Este projeto ainda não tem nenhum serviço. Adicione um serviço (imagem + porta) e implante de novo."
+    );
   }
 
   const log = (m: string) => onLog?.(m);
   const network = await ensurePanelNetwork();
   const domain = project.domain ? assertDomain(project.domain) : "";
 
-  const envMap: Record<string, string> = {};
-  // Variáveis globais entram primeiro; as do projeto sobrescrevem.
+  // Ordem de precedência das variáveis: globais < projeto < serviço.
+  const baseEnv: Record<string, string> = {};
   const globalVars = await prisma.globalEnvVar.findMany();
-  for (const g of globalVars) envMap[g.key] = g.value;
-  for (const ev of project.envVars) envMap[ev.key] = ev.value;
+  for (const g of globalVars) baseEnv[g.key] = g.value;
+  for (const ev of project.envVars) baseEnv[ev.key] = ev.value;
+
+  /** Variáveis exclusivas do serviço (campo JSON no banco). */
+  const serviceEnv = (raw: string): Record<string, string> => {
+    try {
+      const parsed = JSON.parse(raw || "[]");
+      if (!Array.isArray(parsed)) return {};
+      const out: Record<string, string> = {};
+      for (const item of parsed) {
+        if (item && typeof item.key === "string" && item.key) out[item.key] = String(item.value ?? "");
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  };
 
   for (const service of project.services) {
     const containerName = containerNameFor(project.name, service.name);
@@ -169,19 +186,37 @@ export async function deployProject(projectId: string, onLog?: (msg: string) => 
     log(`Baixando imagem ${service.image}...`);
     await ensureImage(service.image, (line) => log(`  ${line}`));
 
-    // Exposição via Traefik: usa o domínio do projeto e a primeira porta do serviço.
+    // Exposição via Traefik. O domínio pode ser o do projeto ou um próprio do
+    // serviço (útil para ter vários apps no mesmo projeto, cada um com URL).
     const containerPort = firstContainerPort(service.ports);
+    const serviceDomain = service.domain ? assertDomain(service.domain) : domain;
+
+    // `expose` controla a publicação. Mantém compatibilidade com projetos
+    // antigos: se não houver a flag, publica quando houver domínio + porta.
+    const shouldExpose =
+      typeof service.expose === "boolean"
+        ? service.expose
+        : Boolean(serviceDomain && containerPort);
+
     const labels: Record<string, string> = {
       [PROJECT_LABEL]: project.id,
       [SERVICE_LABEL]: service.name,
       "corebyte.managed": "true",
     };
     let useNetwork = false;
-    if (domain && containerPort) {
-      Object.assign(labels, buildTraefikLabels(project.id, project.name, service.name, containerPort, domain));
+    if (shouldExpose && containerPort && serviceDomain) {
+      Object.assign(
+        labels,
+        buildTraefikLabels(project.id, project.name, service.name, containerPort, serviceDomain)
+      );
       useNetwork = true;
-      log(`Publicando em https://${domain} (porta interna ${containerPort})`);
+      log(`Publicando ${service.name} em https://${serviceDomain} (porta interna ${containerPort})`);
+    } else if (service.ports) {
+      log(`Serviço ${service.name} sem publicação externa (acessível pela rede interna)`);
     }
+
+    // Variáveis do serviço sobrescrevem as do projeto/globais.
+    const envMap: Record<string, string> = { ...baseEnv, ...serviceEnv(service.envVars) };
 
     const createOptions: Docker.ContainerCreateOptions = {
       Image: service.image,
@@ -213,7 +248,10 @@ export async function deployProject(projectId: string, onLog?: (msg: string) => 
     log(`${service.name} iniciado (${info.Id.slice(0, 12)})`);
   }
 
-  await prisma.project.update({ where: { id: projectId }, data: { status: "running" } });
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { status: "running", lastDeployAt: new Date(), lastError: "" },
+  });
 }
 
 /** Divide um comando em argumentos, respeitando aspas. */

@@ -147,29 +147,36 @@ export async function POST(req: NextRequest) {
       services = [normalizeService({ image: body.image, ports: body.ports, volumes: body.volumes }, 0)];
     }
 
-    if (!services.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Nenhum serviço informado. Envie `services[]`, ou `templateId` (template), ou `image` com `ports`/`volumes`.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const project = await createProjectWithServices(name, services, {
-      description: body.description ? assertString(body.description, "descrição", 1000) : "",
-      type: body.type || "custom",
-      domain,
-      teamId: body.teamId ? teamId : undefined,
-      envVars,
-    });
+    // Projeto pode ser criado VAZIO (só com o nome) e receber serviços depois,
+    // como no Easypanel. Só exige serviço quando o usuário informou algum.
+    const project = services.length
+      ? await createProjectWithServices(name, services, {
+          description: body.description ? assertString(body.description, "descrição", 1000) : "",
+          type: body.type || "custom",
+          domain,
+          teamId: body.teamId ? teamId : undefined,
+          envVars,
+        })
+      : await prisma.project.create({
+          data: {
+            name,
+            description: body.description ? assertString(body.description, "descrição", 1000) : "",
+            type: body.type || "custom",
+            domain,
+            teamId: body.teamId ? teamId : "",
+            status: "stopped",
+            envVars: envVars.length ? { create: envVars } : undefined,
+          },
+          include: { services: true, envVars: true },
+        });
 
     await writeAudit(req, {
       action: "project.create",
       resource: "project",
       resourceId: project.id,
-      details: `Projeto "${name}" criado com ${services.length} serviço(s): ${services.map((s) => s.image).join(", ")}`,
+      details: services.length
+        ? `Projeto "${name}" criado com ${services.length} serviço(s): ${services.map((s) => s.image).join(", ")}`
+        : `Projeto "${name}" criado vazio (serviços serão adicionados depois)`,
       user,
     });
 

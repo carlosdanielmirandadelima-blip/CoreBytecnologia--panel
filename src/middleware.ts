@@ -12,7 +12,7 @@ import { getToken } from "next-auth/jwt";
  *  - páginas exigem sessão (redireciona para /login);
  *  - /api responde 401 em JSON (sem redirecionar HTML, para o frontend e
  *    scripts conseguirem tratar o erro);
- *  - ficam públicas apenas: /login, /register, a página de status,
+ *  - ficam públicas apenas: /login, /register, /setup (primeiro acesso), a página de status,
  *    o fluxo de auth, o endpoint de configuração inicial e a API interna
  *    do worker / API v1 (que têm autenticação própria).
  *
@@ -27,9 +27,14 @@ const PUBLIC_API_PREFIXES = [
   "/api/v1", // chave de API
 ];
 
-const PUBLIC_PAGES = ["/login", "/register"];
+const PUBLIC_PAGES = ["/login", "/register", "/setup"];
 
 function isPublicPath(pathname: string): boolean {
+  // A raiz é pública de propósito: ela decide entre /setup (primeiro acesso,
+  // quando ainda não existe administrador) e /dashboard. Se exigisse sessão
+  // aqui, o middleware mandaria para /login antes dessa decisão acontecer.
+  if (pathname === "/") return true;
+
   if (PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return true;
   }

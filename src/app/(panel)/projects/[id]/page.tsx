@@ -23,6 +23,7 @@ import {
   Globe,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ServicesPanel } from "@/components/projects/services-panel";
 
 interface Service {
   id: string;
@@ -33,6 +34,11 @@ interface Service {
   ports: string;
   volumes: string;
   command: string;
+  domain: string;
+  expose: boolean;
+  note: string;
+  envVars: string;
+  position: number;
 }
 
 interface EnvVar {
@@ -245,43 +251,13 @@ export default function ProjectDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="services" className="mt-4 space-y-3">
-          {project.services.length === 0 ? (
-            <Card className="bg-[#111] border-white/10">
-              <CardContent className="py-8 text-center text-white/40">
-                Nenhum serviço configurado
-              </CardContent>
-            </Card>
-          ) : (
-            project.services.map((service) => (
-              <Card key={service.id} className="bg-[#111] border-white/10">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${service.status === "running" ? "bg-green-400" : "bg-red-400"}`} />
-                      <div>
-                        <p className="text-white font-medium">{service.name}</p>
-                        <p className="text-xs text-white/40">{service.image}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-white/40">
-                      {service.ports && <span>Portas: {service.ports}</span>}
-                      {service.containerId && (
-                        <Link href={`/containers/${service.containerId}`}>
-                          <Button variant="ghost" size="sm" className="text-blue-400 h-7 text-xs">
-                            Ver Container
-                          </Button>
-                        </Link>
-                      )}
-                      <Badge className={service.status === "running" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}>
-                        {service.status === "running" ? "Rodando" : "Parado"}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
+        <TabsContent value="services" className="mt-4">
+          <ServicesPanel
+            projectId={project.id}
+            projectDomain={project.domain}
+            services={project.services}
+            onChanged={fetchProject}
+          />
         </TabsContent>
 
         <TabsContent value="env" className="mt-4">

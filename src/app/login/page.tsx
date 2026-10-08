@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -25,6 +25,14 @@ export default function LoginPage() {
   const [needsCode, setNeedsCode] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  // Mensagem quando o administrador acabou de ser criado na tela de setup.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("setup=ok")) {
+      setNotice("Administrador criado com sucesso. Entre com os dados que você definiu.");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +90,12 @@ export default function LoginPage() {
 
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {notice && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-lg p-3">
+                {notice}
+              </div>
+            )}
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg p-3">
                 {error}

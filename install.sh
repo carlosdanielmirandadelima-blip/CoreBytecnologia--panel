@@ -174,7 +174,7 @@ done
 
 # ---------------------------------------------------------------- admin
 echo
-info "Criando o administrador"
+info "Primeiro acesso"
 if docker compose exec -T panel node -e "
 const {PrismaClient}=require('@prisma/client');
 const p=new PrismaClient();
@@ -182,35 +182,27 @@ p.user.count().then(c=>process.exit(c>0?0:1)).catch(()=>process.exit(2));
 " 2>/dev/null; then
   ok "já existe administrador cadastrado"
 else
-  echo "  Defina a conta de administrador do painel:"
-  read -rp "  Nome: " ADMIN_NAME
-  read -rp "  E-mail: " ADMIN_EMAIL
-  read -rsp "  Senha (mín. 10 caracteres, com letras e números): " ADMIN_PASS
-  echo
-  if [ -z "$ADMIN_NAME" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASS" ]; then
-    warn "Dados incompletos. Crie o administrador depois com:"
-    warn "  docker compose exec panel node scripts/create-admin.js"
-  else
-    if docker compose exec -T panel node -e "
-const {PrismaClient}=require('@prisma/client');
-const bcrypt=require('bcryptjs');
-const p=new PrismaClient();
-const [name,email,secret]=process.argv.slice(1);
-const hashKey=['pass','word'].join('');
-(async()=>{
-  const data={name,email:email.toLowerCase(),role:'admin'};
-  data[hashKey]=await bcrypt.hash(secret,12);
-  const u=await p.user.create({data});
-  console.log('criado:'+u.email);
-  process.exit(0);
-})().catch(e=>{console.error(e.message);process.exit(1)});
-" "$ADMIN_NAME" "$ADMIN_EMAIL" "$ADMIN_PASS"; then
-      ok "administrador criado"
-    else
-      warn "Não foi possível criar automaticamente. Rode no servidor:"
-      warn "  docker compose exec panel node scripts/create-admin.js"
-    fi
+  # O primeiro acesso no navegador cria o administrador (define e-mail e senha).
+  # O código abaixo é o que autoriza essa criação.
+  SETUP_CODE="$(grep -E '^COREBYTE_SETUP_TOKEN=' "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2-)"
+  if [ -z "$SETUP_CODE" ]; then
+    SETUP_CODE="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
+    printf '%s\n' "COREBYTE_SETUP_TOKEN=${SETUP_CODE}" >> "$INSTALL_DIR/.env"
+    docker compose up -d panel >/dev/null 2>&1 || true
+    sleep 5
   fi
+  echo
+  echo -e "  ${YELLOW}Abra o painel no navegador:${NC}"
+  echo -e "     ${BLUE}${PANEL_URL_FINAL:-http://localhost:3000}${NC}"
+  echo
+  echo -e "  A tela de primeiro acesso vai pedir este código de configuração:"
+  echo -e "     ${GREEN}${SETUP_CODE}${NC}"
+  echo
+  echo "  Nela você define o SEU e-mail e a SUA senha de administrador."
+  echo "  Depois de criar a conta, remova a linha COREBYTE_SETUP_TOKEN do .env."
+  echo
+  warn "Prefere criar pelo terminal? Rode:"
+  warn "  docker compose exec panel node scripts/create-admin.js"
 fi
 
 # ---------------------------------------------------------------- resumo
@@ -219,6 +211,11 @@ echo -e "${GREEN}=============================================="
 echo "  CoreByte Panel instalado!"
 echo -e "==============================================${NC}"
 FINAL_DOMAIN="$(grep -E '^PANEL_DOMAIN=' .env | cut -d= -f2-)"
+if [ "$FINAL_DOMAIN" = "localhost" ]; then
+  PANEL_URL_FINAL="http://localhost:3000"
+else
+  PANEL_URL_FINAL="https://${FINAL_DOMAIN}"
+fi
 if [ "$FINAL_DOMAIN" = "localhost" ]; then
   echo -e "Acesse: ${BLUE}http://localhost:3000${NC}"
 else
